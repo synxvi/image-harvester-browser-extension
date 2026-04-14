@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Hover Save Settings</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 data-i18n="headerTitle">Image Hover Save</h1>
+            <p data-i18n="headerSubtitle">Quick image download on hover</p>
+            <div class="header-lang">
+                <label for="languageSelect" data-i18n="langLabel">Language:</label>
+                <select id="languageSelect">
+                    <option value="auto" data-i18n="langAuto">🌐 Auto (Browser)</option>
+                    <option value="en" data-i18n="langEnglish">English</option>
+                    <option value="zh_CN" data-i18n="langChinese">中文</option>
+                </select>
+            </div>
+        </header>
+
+        <main>
+            <div class="setting-group">
+                <label class="simple-checkbox">
+                    <input type="checkbox" id="enabledToggle" checked>
+                    <span data-i18n="enableExtension">Enable extension</span>
+                </label>
+            </div>
+
+            <div class="setting-group">
+                <label for="hoverDelay" data-i18n="hoverDelay">Icon appear delay:</label>
+                <div class="delay-controls">
+                    <input type="range" id="hoverDelay" min="500" max="3000" step="100" value="1000">
+                    <span id="delayValue">1.5s</span>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label data-i18n="basicDetection">Basic media detection:</label>
+                <div class="checkbox-group checkbox-group-inline">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="detectImg" checked>
+                        <span data-i18n="imgTags">IMG tags</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="detectVideo" checked>
+                        <span data-i18n="videoElements">Video elements</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Current Site Domain -->
+            <div class="setting-group current-site-section" id="currentSiteSection">
+                <label data-i18n="currentSiteLabel">Current site:</label>
+                <div class="current-site-row">
+                    <span class="current-site-domain" id="currentSiteDomain">—</span>
+                    <button type="button" class="exclude-site-btn" id="excludeSiteBtn" data-i18n="excludeSiteBtn">Block</button>
+                </div>
+            </div>
+
+            <!-- Base Subfolder (parent for all download paths) -->
+            <div class="setting-group base-subfolder-section">
+                <label for="baseSubfolder" data-i18n="baseSubfolderLabel">Base save directory:</label>
+                <input type="text" id="baseSubfolder" placeholder="image (optional)" data-i18n-placeholder="baseSubfolderPlaceholder">
+                <p class="help-text" data-i18n="baseSubfolderHelp">A parent folder inside Downloads. All paths (subfolder, multi-path) will be created under this directory.</p>
+            </div>
+
+            <div class="setting-group">
+                <details id="advancedSettings">
+                    <summary data-i18n="advancedSettings">⚙️ Advanced</summary>
+                    <div class="adv-settings-panel">
+                        <!-- 下载模式 -->
+                        <div class="adv-card">
+                            <div class="adv-card-header"><span data-i18n="experimentalModes">Experimental download modes</span></div>
+                            <p class="adv-card-desc" data-i18n="experimentalHelp">Experimental modes for more restrictive sites. YMMV.</p>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="downloadMode" id="downloadModeNormal" value="normal" checked>
+                                    <span data-i18n="normalDownload">Normal download (using background worker)</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="downloadMode" id="downloadModeCache" value="cache">
+                                    <span title="Bypasses hotlink restrictions by fetching via current page" data-i18n="fetchBasedDownload">Try fetch-based downloads</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="downloadMode" id="downloadModeCanvas" value="canvas">
+                                    <span data-i18n="canvasExtraction">Try canvas extraction</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 高级检测 -->
+                        <div class="adv-card">
+                            <div class="adv-card-header" data-i18n="advancedDetection">Advanced detection types</div>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="detectSvg">
+                                    <span data-i18n="svgElements">SVG elements</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="detectBackground">
+                                    <span data-i18n="backgroundImages">Background images</span>
+                                </label>
+                            </div>
+                            <p class="adv-card-desc" data-i18n="advancedDetectionHelp">Advanced detection modes (disabled by default)</p>
+                        </div>
+
+                        <!-- 视觉反馈 -->
+                        <div class="adv-card">
+                            <div class="adv-card-header" data-i18n="visualFeedback">Visual feedback</div>
+                            <div class="radio-group">
+                                <label class="radio-label">
+                                    <input type="radio" name="borderHighlight" id="borderHighlightOff" value="off" checked>
+                                    <span data-i18n="noBorder">No border highlighting</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="borderHighlight" id="borderHighlightGray" value="gray">
+                                    <span data-i18n="subtleGrayBorder">Subtle gray border</span>
+                                </label>
+                                <label class="radio-label">
+                                    <input type="radio" name="borderHighlight" id="borderHighlightGreen" value="green">
+                                    <span data-i18n="brightGreenBorder">Bright green border</span>
+                                </label>
+                            </div>
+                            <p class="adv-card-desc" data-i18n="visualFeedbackHelp">Show border around images when hovering (helps identify targetable images)</p>
+                        </div>
+
+                        <!-- 文件过滤 -->
+                        <div class="adv-card">
+                            <div class="adv-card-header" data-i18n="allowedExtensions">Allowed file extensions</div>
+                            <input type="text" id="allowedExtensions">
+                            <p class="adv-card-desc" data-i18n="allowedExtensionsHelp">Comma-separated list of allowed file extensions</p>
+                        </div>
+
+                        <!-- 最小尺寸 -->
+                        <div class="adv-card">
+                            <div class="adv-card-header" data-i18n="minImageSize">Minimum image size (px)</div>
+                            <input type="number" id="minImageSize" min="50" max="1000" value="100">
+                            <p class="adv-card-desc" data-i18n="minImageSizeHelp">Minimum width/height for images to be detected (50-1000px)</p>
+                        </div>
+
+                        <!-- 格式转换 & 延迟 -->
+                        <div class="adv-card">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="convertWebpToPng">
+                                <span data-i18n="convertWebpToPng">Convert WebP to PNG</span>
+                            </label>
+                            <p class="adv-card-desc" data-i18n="convertWebpToPngHelp">Automatically convert WebP images to PNG format for better compatibility</p>
+                            <div class="adv-card-divider"></div>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="longHideDelay">
+                                <span data-i18n="longHideDelay">Use long hide delay (1.5s)</span>
+                            </label>
+                            <p class="adv-card-desc" data-i18n="longHideDelayHelp">Prevents button from disappearing instantly on problematic video players</p>
+                        </div>
+
+                        <!-- 域名排除 & URL策略 & 重置 -->
+                        <div class="adv-card adv-card-actions">
+                            <button type="button" class="exclusion-btn" id="exclusionBtn" data-i18n="manageExclusions">🚫 Manage Domain Exclusions</button>
+                            <p class="adv-card-desc" data-i18n="manageExclusionsHelp">Configure domains where the extension should not work</p>
+                            <div class="adv-card-divider"></div>
+                            <button type="button" class="exclusion-btn" id="strategyBtn" data-i18n="manageStrategies">🔗 缩略图直链下载</button>
+                            <p class="adv-card-desc" data-i18n="manageStrategiesHelp">通过配置正则，在缩略图上悬停即可下载原图</p>
+                            <div class="adv-card-divider"></div>
+                            <button type="button" class="reset-btn" id="resetBtn" data-i18n="resetAllSettings">🔄 Reset All Settings</button>
+                            <p class="adv-card-desc" data-i18n="resetAllSettingsHelp">Reset all settings to default values. This action cannot be undone.</p>
+                        </div>
+                    </div>
+                </details>
+            </div>
+
+            <!-- Download Mode Indicator -->
+            <div class="setting-group download-mode-header">
+                <span class="download-mode-indicator" id="downloadModeIndicator"><span class="mode-label" data-i18n="downloadModeLabel">Current download mode:</span> <strong class="mode-value">Normal</strong></span>
+            </div>
+
+            <!-- Multi-Path Save (outside Advanced, above Bulk Download) -->
+            <div class="setting-group multi-path-section">
+                <label class="simple-checkbox">
+                    <input type="checkbox" id="multiPathEnabled">
+                    <span data-i18n="multiPathEnableLabel">Multi-path download</span>
+                </label>
+                <div id="multiPathContainer" style="display:none;">
+                    <p class="help-text" data-i18n="multiPathHelp">Each path shows as a separate hover button. Only works in Normal download mode.</p>
+                    <div id="pathList"></div>
+                    <button type="button" id="addPathBtn" class="add-path-btn" data-i18n="addPathBtn">+ Add Path</button>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <h3 data-i18n="bulkDownload">Bulk Download:</h3>
+                <div class="bulk-download-buttons">
+                    <button id="downloadAllBtn" class="download-all-btn" data-i18n="galleryViewBtn">
+                        📦 Gallery View
+                    </button>
+                    <button id="downloadZipBtn" class="download-zip-btn" data-i18n="downloadZipBtn">
+                        🗜️ Download ZIP
+                    </button>
+                </div>
+                <p class="help-text" data-i18n="bulkDownloadHelp">Gallery opens images in a new tab. ZIP downloads all images as a compressed file.</p>
+            </div>
+        </main>
+
+        <footer>
+            <div class="status" id="status"></div>
+            <div class="version" id="version"></div>
+        </footer>
+    </div>
+
+    <!-- Third-party libraries -->
+    <!-- JSZip v3.10.1 - MIT License - https://github.com/Stuk/jszip/ -->
+    <script src="jszip.min.js"></script>
+    <script src="popup.js"></script>
+</body>
+</html>

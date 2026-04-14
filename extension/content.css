@@ -1,0 +1,153 @@
+/* Image Hover Save Extension - Content Styles */
+
+.ihs-download-btn {
+    display: none;
+    position: fixed;
+    right: 0; /* set by JS dynamically */
+    top: 0;   /* set by JS dynamically */
+    left: auto;
+    width: 26px;
+    height: 26px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    border: 1.5px solid #fff;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s ease;
+    user-select: none;
+    z-index: 2147483647;
+    align-items: center;
+    justify-content: center;
+}
+
+.ihs-download-btn:hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.ihs-download-btn:active {
+    transform: scale(0.95);
+}
+
+/* ===== Multi-Path Download Toolbar ===== */
+.ihs-download-toolbar {
+    display: none;
+    position: fixed;
+    right: 0; /* set by JS dynamically */
+    top: 0;   /* set by JS dynamically */
+    left: auto;
+    z-index: 2147483647;
+    background: none;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    padding: 0;
+    transition: right 0.15s ease, top 0.15s ease;
+    animation: ihs-toolbar-fadeIn 0.15s ease-out;
+}
+
+@keyframes ihs-toolbar-fadeIn {
+    from { opacity: 0; transform: translateX(4px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* Individual path button inside the toolbar */
+.ihs-toolbar-btn {
+    display: block;
+    white-space: nowrap;
+    padding: 5px 10px;
+    margin-bottom: 7px;
+    font-size: 11px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.76);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.15s ease;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ihs-toolbar-btn:last-child {
+    margin-bottom: 0;
+}
+
+.ihs-toolbar-btn:hover {
+    background: rgba(102, 126, 234, 0.85);
+    border-color: rgba(102, 126, 234, 1);
+    transform: scale(1.12);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.ihs-toolbar-btn:active {
+    transform: scale(0.95);
+    background: rgba(82, 106, 194, 0.95);
+}
+
+/* ===== Download Toast Notifications ===== */
+.ihs-toast-container {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 2147483647;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+}
+
+.ihs-toast {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #fff;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    animation: ihs-toast-in 0.3s ease-out;
+    pointer-events: auto;
+    max-width: 200px;
+    word-break: break-all;
+}
+
+.ihs-toast-start {
+    background: rgba(102, 126, 234, 0.65);
+}
+
+.ihs-toast-done {
+    background: rgba(40, 167, 69, 0.65);
+}
+
+.ihs-toast-text {
+    line-height: 1.2;
+}
+
+.ihs-toast-out {
+    animation: ihs-toast-out 0.3s ease-in forwards;
+}
+
+@keyframes ihs-toast-in {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes ihs-toast-out {
+    from { opacity: 1; transform: translateX(0); }
+    to { opacity: 0; transform: translateX(20px); }
+}

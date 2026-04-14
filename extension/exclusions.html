@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Hover Save - Domain Exclusions</title>
+    <link rel="stylesheet" href="exclusions.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 data-i18n="exclusionsTitle">Domain Exclusions</h1>
+            <p data-i18n="exclusionsSubtitle">Configure domains where Image Hover Save should not work</p>
+        </header>
+
+        <main>
+            <section class="exclusions-section">
+                <div class="help-text" data-i18n="exclusionsHelp">
+                    Add domains where you don't want the extension to work. Use specific domains like "apps.domain.com"
+                    to exclude only that domain, or use "domain.com" to exclude all subdomains. When you visit an excluded
+                    domain, the extension will not show download buttons on images.
+                </div>
+
+                <div class="add-domain">
+                    <label for="domain-input" data-i18n="exclusionsAddLabel">Add domain:</label>
+                    <div class="input-group">
+                        <input type="text" id="domain-input" placeholder="example.com" data-i18n-placeholder="exclusionsAddPlaceholder" />
+                        <button id="add-btn" disabled data-i18n="exclusionsAddBtn">Add</button>
+                    </div>
+                </div>
+
+                <div class="exclusions-list">
+                    <h3 data-i18n="exclusionsListTitle">Excluded Domains</h3>
+                    <div id="exclusions-container">
+                        <p id="no-exclusions" class="empty-state" data-i18n="exclusionsEmpty">No domains excluded</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="examples-section">
+                <h3 data-i18n="exclusionsExamplesTitle">Pattern Examples</h3>
+                <ul class="examples">
+                    <li data-i18n="exclusionsExample1"><code>example.com</code> - Excludes example.com and all subdomains (a.example.com, b.example.com, etc.)</li>
+                    <li data-i18n="exclusionsExample2"><code>app.example.com</code> - Excludes app.example.com and its subdomains, but won't exclude example.com</li>
+                    <li data-i18n="exclusionsExample3"><code>google.com</code> - Good for avoiding conflicts with Google's own image features</li>
+                </ul>
+            </section>
+        </main>
+
+        <footer>
+            <div class="storage-status">
+                <span id="storage-type" data-i18n="exclusionsSync">Settings will be synced across your devices</span>
+            </div>
+            <div class="status" id="status"></div>
+            <div class="navigation">
+                <button id="back-btn" class="back-btn" data-i18n="exclusionsBack">← Back to Settings</button>
+            </div>
+            <div class="copyright">© 2025 @thejjw • <span id="version"></span></div>
+        </footer>
+    </div>
+
+    <script src="exclusions.js"></script>
+</body>
+</html>

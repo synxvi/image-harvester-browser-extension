@@ -1,0 +1,765 @@
+// Image Hover Save Extension - Background Script
+// Copyright (c) Jaewoo Jeon (@thejjw) and Image Hover Save Extension Contributors
+// SPDX-License-Identifier: zlib-acknowledgement
+
+// Debug flag - set to false to disable all console output
+const DEBUG = false;
+
+// Debug console wrapper
+const debug = {
+    log: (...args) => DEBUG && console.log(...args),
+    error: (...args) => DEBUG && console.error(...args),
+    warn: (...args) => DEBUG && console.warn(...args),
+    info: (...args) => DEBUG && console.info(...args)
+};
+
+// Configuration
+const CONFIG = {
+    DEFAULT_HOVER_DELAY: 1000
+};
+
+let dynamicRuleIdCount = 1000;
+const hostnameToRuleId = new Map();
+
+// Helper: update badge for specific tab
+function updateBadge(disabled, excluded = false, tabId = null) {
+    const text = disabled ? 'OFF' : (excluded ? 'X' : '');
+    const color = disabled ? '#d00' : '#c08040';
+    
+    if (tabId) {
+        chrome.action.setBadgeText({ text, tabId });
+        if (text) {
+            chrome.action.setBadgeBackgroundColor({ color, tabId });
+        }
+    } else {
+        chrome.action.setBadgeText({ text });
+        if (text) {
+            chrome.action.setBadgeBackgroundColor({ color });
+        }
+    }
+    debug.log(`Badge updated: text="${text}", color="${color}", tabId=${tabId || 'all'}`);
+}
+
+// Set default settings on install
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.storage.sync.set({
+        ihs_enabled: true,
+        ihs_hover_delay: CONFIG.DEFAULT_HOVER_DELAY
+    });
+    
+    // Set initial badge state
+    updateBadge(false, false);
+    
+    // Create context menu item for links
+    chrome.contextMenus.create({
+        id: "ihs-download-link",
+        title: chrome.i18n.getMessage("contextMenuDownloadLink"),
+        contexts: ["link"],
+        documentUrlPatterns: ["http://*/*", "https://*/*"]
+    });
+    
+    // Create context menu item for videos
+    chrome.contextMenus.create({
+        id: "ihs-download-video",
+        title: chrome.i18n.getMessage("contextMenuDownloadVideo"),
+        contexts: ["video"],
+        documentUrlPatterns: ["http://*/*", "https://*/*"]
+    });
+    
+    // Create context menu item for images
+    chrome.contextMenus.create({
+        id: "ihs-download-image",
+        title: chrome.i18n.getMessage("contextMenuDownloadImage"),
+        contexts: ["image"],
+        documentUrlPatterns: ["http://*/*", "https://*/*"]
+    });
+    
+    debug.log('Extension installed, default settings applied');
+    
+    // Clear all existing dynamic rules on install to start fresh
+    chrome.declarativeNetRequest.getDynamicRules((rules) => {
+        const ruleIds = rules.map(r => r.id);
+        chrome.declarativeNetRequest.updateDynamicRules({
+            removeRuleIds: ruleIds
+        });
+        debug.log('Stale dynamic rules cleared on install');
+    });
+});
+
+// Helper: check if a tab's URL is excluded and update badge accordingly
+function updateBadgeForTab(tabId, url) {
+    if (!url || !url.startsWith('http')) return;
+    chrome.storage.sync.get(['ihs_enabled', 'ihs_domain_exclusions'], (data) => {
+        const disabled = !data.ihs_enabled;
+        if (disabled) {
+            updateBadge(true, false, tabId);
+            return;
+        }
+        const exclusions = data.ihs_domain_exclusions || [];
+        try {
+            const hostname = new URL(url).hostname.toLowerCase();
+            const excluded = exclusions.some(e => {
+                const d = e.toLowerCase();
+                return hostname === d || hostname.endsWith('.' + d);
+            });
+            updateBadge(false, excluded, tabId);
+        } catch (e) {
+            updateBadge(false, false, tabId);
+        }
+    });
+}
+
+// On startup, set badge state for all tabs
+chrome.runtime.onStartup.addListener(() => {
+    chrome.storage.sync.get('ihs_enabled', (data) => {
+        const disabled = !data.ihs_enabled;
+        chrome.tabs.query({}, (tabs) => {
+            tabs.forEach(tab => {
+                updateBadgeForTab(tab.id, tab.url);
+            });
+        });
+        debug.log('Extension startup, badge state set for all tabs');
+    });
+
+    // Clear session-specific dynamic rules on startup
+    chrome.declarativeNetRequest.getDynamicRules((rules) => {
+        const ruleIds = rules.map(r => r.id);
+        if (ruleIds.length > 0) {
+            chrome.declarativeNetRequest.updateDynamicRules({
+                removeRuleIds: ruleIds
+            });
+            debug.log('Stale dynamic rules cleared on startup');
+        }
+    });
+});
+
+// Debounce badge updates per tab to prevent flicker
+const badgeTimers = new Map();
+function debouncedUpdateBadgeForTab(tabId, url) {
+    if (badgeTimers.has(tabId)) {
+        clearTimeout(badgeTimers.get(tabId));
+    }
+    badgeTimers.set(tabId, setTimeout(() => {
+        badgeTimers.delete(tabId);
+        updateBadgeForTab(tabId, url);
+    }, 100));
+}
+
+// Re-check badge when user switches tabs
+chrome.tabs.onActivated.addListener((activeInfo) => {
+    chrome.tabs.get(activeInfo.tabId, (tab) => {
+        if (chrome.runtime.lastError) return;
+        updateBadgeForTab(tab.id, tab.url);
+    });
+});
+
+// Re-check badge when a tab finishes loading
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'complete' && tab.url) {
+        debouncedUpdateBadgeForTab(tabId, tab.url);
+    }
+});
+
+// Listen for storage changes to update badges
+chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (changes.ihs_enabled && areaName === 'sync') {
+        const disabled = !changes.ihs_enabled.newValue;
+        debug.log('Extension enabled status changed:', !disabled);
+        
+        // Update badge for all tabs
+        chrome.tabs.query({}, (tabs) => {
+            tabs.forEach(tab => {
+                updateBadge(disabled, false, tab.id);
+            });
+        });
+    }
+    
+    if (changes.ihs_domain_exclusions && areaName === 'sync') {
+        debug.log('Domain exclusions changed, content scripts will update automatically');
+        // Content scripts will detect the storage change automatically
+    }
+});
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+    if (info.menuItemId === "ihs-download-link") {
+        downloadLinkDirectly(info.linkUrl);
+    } else if (info.menuItemId === "ihs-download-video") {
+        downloadVideoDirectly(info.srcUrl, tab);
+    } else if (info.menuItemId === "ihs-download-image") {
+        downloadImageDirectly(info.srcUrl, tab);
+    }
+});
+
+// Download ID → Tab ID 映射，用于下载完成后通知对应页面
+const downloadTabMap = new Map();
+
+// Handle download requests from content script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    const tabId = sender.tab?.id;
+
+    if (message.type === 'download_image') {
+        downloadImage(message.url, message.filename, message.downloadMode, message.pathIndex, tabId);
+    } else if (message.type === 'download_canvas_image') {
+        downloadCanvasImage(message.dataUrl, message.filename, message.pathIndex, tabId);
+    } else if (message.type === 'extract_canvas_image') {
+        // For canvas extraction, we'll need to send a message back to content script
+        sendResponse({ success: true });
+    } else if (message.type === 'check_webp_animated') {
+        // Check if WebP is animated (runs in background to bypass CORS)
+        checkWebPAnimated(message.url).then(result => {
+            sendResponse({ isAnimated: result });
+        }).catch(error => {
+            debug.error('Error checking WebP animation:', error);
+            sendResponse({ isAnimated: null });
+        });
+        return true; // Keep message channel open for async response
+    } else if (message.type === 'fetch_webp_for_conversion') {
+        // Fetch full WebP image and return as data URL (bypasses CORS)
+        fetchImageAsDataUrl(message.url).then(dataUrl => {
+            sendResponse({ success: !!dataUrl, dataUrl: dataUrl });
+        }).catch(error => {
+            debug.error('Error fetching WebP image:', error);
+            sendResponse({ success: false, dataUrl: null });
+        });
+        return true; // Keep message channel open for async response
+    } else if (message.type === 'ihs:domain_status_changed') {
+        // Only handle from top-level frame
+        if (sender.frameId !== undefined && sender.frameId !== 0) {
+            return;
+        }
+        // Badge is managed by background via onActivated/onUpdated, ignore duplicate updates
+    } else if (message.type === 'ihs:request_referer_rule') {
+        addRefererRule(message.mediaHost, message.referer).catch(e => {
+            debug.error('Failed to update referer rule:', e);
+        });
+    }
+});
+
+// Dynamic rule management for referer spoofing
+async function addRefererRule(mediaHost, referer) {
+    try {
+        if (hostnameToRuleId.has(mediaHost)) return;
+
+        const id = dynamicRuleIdCount++;
+        hostnameToRuleId.set(mediaHost, id);
+
+        const rule = {
+            id: id,
+            priority: 1,
+            action: {
+                type: 'modifyHeaders',
+                requestHeaders: [
+                    { header: 'referer', operation: 'set', value: referer },
+                    { header: 'origin', operation: 'remove' }
+                ],
+                responseHeaders: [
+
+                    { header: 'access-control-allow-origin', operation: 'set', value: '*' },
+                    { header: 'access-control-allow-headers', operation: 'set', value: '*' }
+                ]
+            },
+            condition: {
+                urlFilter: mediaHost,
+                resourceTypes: ['main_frame', 'sub_frame', 'xmlhttprequest', 'media', 'image', 'other']
+            }
+        };
+
+        await chrome.declarativeNetRequest.updateDynamicRules({
+            addRules: [rule]
+        });
+        debug.log(`Dynamic referer rule added for host: ${mediaHost} (ID: ${id}) with referer: ${referer}`);
+    } catch (e) {
+        debug.error(`Error adding dynamic referer rule for ${mediaHost}:`, e);
+    }
+}
+
+// Download image function
+async function downloadImage(url, filename, downloadMode = 'normal', pathIndex = -1, tabId = null) {
+    try {
+        // Clean filename - remove any potentially problematic characters
+        const cleanFilename = filename.replace(/[<>:"/\\|?*]/g, '_');
+
+        let downloadUrl = url;
+
+        const downloadId = await chrome.downloads.download({
+            url: url,
+            filename: await buildDownloadPath(cleanFilename, pathIndex),
+            saveAs: false // Save to default downloads folder without dialog
+        });
+
+        // 记录映射，用于下载完成后通知页面
+        if (tabId) downloadTabMap.set(downloadId, tabId);
+
+        debug.log(`Image download started: ${cleanFilename} (ID: ${downloadId}) - Mode: ${downloadMode} - PathIndex: ${pathIndex}`);
+    } catch (error) {
+        debug.error('Download failed:', error);
+
+        // Fallback: try to download without custom filename
+        try {
+            const fallbackId = await chrome.downloads.download({
+                url: url,
+                saveAs: false
+            });
+            if (tabId) downloadTabMap.set(fallbackId, tabId);
+        } catch (fallbackError) {
+            debug.error('Fallback download also failed:', fallbackError);
+        }
+    }
+}
+
+// Download canvas-extracted image (or fast-path blob) from data URL
+async function downloadCanvasImage(dataUrl, filename, pathIndex = -1, tabId = null) {
+    try {
+        debug.log('Downloading canvas/fast-path image:', filename);
+
+        // Clean filename - remove any potentially problematic characters
+        const cleanFilename = filename.replace(/[<>:"/\\|?*]/g, '_');
+
+        const downloadId = await chrome.downloads.download({
+            url: dataUrl,
+            filename: await buildDownloadPath(cleanFilename, pathIndex),
+            saveAs: false // Save to default downloads folder without dialog
+        });
+
+        if (tabId) downloadTabMap.set(downloadId, tabId);
+
+        debug.log(`Canvas/Fast-path image download started: ${cleanFilename} (ID: ${downloadId})`);
+
+    } catch (error) {
+        debug.error('Canvas/Fast-path image download failed:', error);
+    }
+}
+
+// 监听下载完成，通知对应页面弹出 toast
+chrome.downloads.onChanged.addListener((delta) => {
+    if (delta.state && delta.state.current === 'complete') {
+        const tabId = downloadTabMap.get(delta.id);
+        if (tabId) {
+            chrome.tabs.sendMessage(tabId, { type: 'download_complete' }).catch(() => {
+                debug.log('下载完成通知发送失败，标签页可能已关闭', tabId);
+            });
+            downloadTabMap.delete(delta.id);
+        }
+    }
+});
+
+// Experimental function to get image from browser cache
+async function getImageFromCache(url) {
+    try {
+        // Use fetch with cache-only mode to get from cache
+        const response = await fetch(url, {
+            cache: 'only-if-cached',
+            mode: 'same-origin'
+        });
+        
+        if (response.ok) {
+            return await response.blob();
+        }
+    } catch (error) {
+        debug.log('Cache-only fetch failed, trying force-cache:', error);
+        
+        // Fallback: try force-cache mode
+        try {
+            const response = await fetch(url, {
+                cache: 'force-cache'
+            });
+            
+            if (response.ok) {
+                return await response.blob();
+            }
+        } catch (forceCacheError) {
+            debug.log('Force-cache fetch also failed:', forceCacheError);
+        }
+    }
+    
+    return null;
+}
+
+// Get configured download subfolder from storage
+async function getDownloadSubfolder() {
+    try {
+        const data = await chrome.storage.sync.get('ihs_download_subfolder');
+        let subfolder = data.ihs_download_subfolder;
+        if (subfolder && typeof subfolder === 'string') {
+            // Sanitize: strip illegal characters, leading/trailing slashes
+            subfolder = subfolder.replace(/[<>:"\\|?*]/g, '').replace(/^[/\\]+|[/\\]+$/g, '');
+            if (subfolder.length > 0 && subfolder.length <= 200) {
+                return subfolder;
+            }
+        }
+    } catch (error) {
+        debug.error('Error getting download subfolder:', error);
+    }
+    return '';
+}
+
+// Build full download path by prepending base subfolder + configured subfolder or multi-path subfolder
+async function getBaseSubfolder() {
+    try {
+        const data = await chrome.storage.sync.get('ihs_base_subfolder');
+        let baseSubfolder = data.ihs_base_subfolder;
+        if (baseSubfolder && typeof baseSubfolder === 'string') {
+            // Sanitize: strip illegal characters, leading/trailing slashes
+            baseSubfolder = baseSubfolder.replace(/[<>:"\\|?*]/g, '').replace(/^[/\\]+|[/\\]+$/g, '');
+            if (baseSubfolder.length > 0 && baseSubfolder.length <= 200) {
+                return baseSubfolder;
+            }
+        }
+    } catch (error) {
+        debug.error('Error getting base subfolder:', error);
+    }
+    return '';
+}
+
+async function buildDownloadPath(filename, pathIndex = -1) {
+    const baseDir = await getBaseSubfolder();
+
+    if (pathIndex >= 0) {
+        // Multi-path mode: use the specific path at this index
+        const paths = await getMultiPaths();
+        if (paths && paths[pathIndex]) {
+            let subfolder = paths[pathIndex].path;
+            // Sanitize folder name
+            subfolder = subfolder.replace(/[<>:"\\|?*]/g, '').replace(/^[/\\]+|[/\\]+$/g, '');
+            if (subfolder.length > 0) {
+                debug.log(`Multi-path download: using "${subfolder}" for index ${pathIndex}`);
+                const fullPath = baseDir ? `${baseDir}/${subfolder}/${filename}` : `${subfolder}/${filename}`;
+                return fullPath;
+            }
+        }
+        // If pathIndex is out of range or invalid, fall through to single-subfolder logic
+        debug.log(`Multi-path index ${pathIndex} not found, falling back to single subfolder`);
+    }
+    
+    // Fallback: original single subfolder (for ZIP downloads / right-click menu)
+    const subfolder = await getDownloadSubfolder();
+    if (subfolder) {
+        const fullPath = baseDir ? `${baseDir}/${subfolder}/${filename}` : `${subfolder}/${filename}`;
+        return fullPath;
+    }
+    if (baseDir) {
+        return `${baseDir}/${filename}`;
+    }
+    return filename;
+}
+
+// Get configured multi-paths from storage
+async function getMultiPaths() {
+    try {
+        const data = await chrome.storage.sync.get('ihs_multi_paths');
+        const paths = data.ihs_multi_paths;
+        if (Array.isArray(paths)) return paths;
+    } catch (error) {
+        debug.error('Error getting multi paths:', error);
+    }
+    return null;
+}
+
+// Shared function to generate and clean filenames
+function generateCleanFilename(url, fallbackPrefix = 'download', fallbackExtension = '') {
+    let filename;
+    
+    // Clean up URL - remove fragment identifiers like #t=0.01
+    let cleanUrl = url;
+    if (cleanUrl.includes('#')) {
+        cleanUrl = cleanUrl.split('#')[0];
+    }
+    
+    try {
+        const urlObj = new URL(cleanUrl);
+        filename = urlObj.pathname.split('/').pop();
+        
+        // Throw error if no filename from URL to use fallback logic
+        if (!filename || filename === '') {
+            throw new Error('No filename found in URL');
+        }
+    } catch (error) {
+        debug.warn(`Using fallback filename for ${fallbackPrefix}:`, error.message);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        filename = `${fallbackPrefix}-${timestamp}${fallbackExtension}`;
+    }
+    
+    // Clean filename - remove problematic characters and limit length
+    let cleanFilename = filename.replace(/[<>:"/\\|?*]/g, '_');
+    
+    // Limit filename to 100 characters (conservative limit for most filesystems)
+    if (cleanFilename.length > 100) {
+        const ext = cleanFilename.lastIndexOf('.');
+        if (ext > 0 && ext > cleanFilename.length - 10) {
+            // Keep extension if it exists and is reasonable
+            const extension = cleanFilename.substring(ext);
+            const basename = cleanFilename.substring(0, ext);
+            cleanFilename = basename.substring(0, 100 - extension.length) + extension;
+        } else {
+            cleanFilename = cleanFilename.substring(0, 100);
+        }
+    }
+    
+    return cleanFilename;
+}
+
+// Check if a WebP image is animated by examining its file header
+// This runs in the background script context to bypass CORS restrictions
+async function checkWebPAnimated(url) {
+    try {
+        debug.log('Checking if WebP is animated (background):', url);
+        
+        // Fetch only the first few KB to check the header
+        const response = await fetch(url, {
+            headers: {
+                'Range': 'bytes=0-1024' // Only fetch first 1KB for header analysis
+            }
+        });
+        
+        if (!response.ok) {
+            debug.warn('Failed to fetch WebP for animation check:', response.status);
+            return null;
+        }
+        
+        const arrayBuffer = await response.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        
+        // Check WebP signature first: "RIFF" + 4 bytes + "WEBP"
+        if (bytes.length < 12) {
+            debug.warn('WebP file too small for header analysis');
+            return null;
+        }
+        
+        // Check RIFF signature
+        const riffSig = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+        if (riffSig !== 'RIFF') {
+            debug.warn('Not a valid RIFF file');
+            return false;
+        }
+        
+        // Check WEBP signature
+        const webpSig = String.fromCharCode(bytes[8], bytes[9], bytes[10], bytes[11]);
+        if (webpSig !== 'WEBP') {
+            debug.warn('Not a valid WebP file');
+            return false;
+        }
+        
+        // Look for animation indicators in the WebP chunks
+        // WebP animated images contain either:
+        // 1. "ANIM" chunk (VP8X with animation flag)
+        // 2. Multiple "ANMF" chunks (animation frames)
+        
+        let offset = 12; // Start after RIFF header
+        
+        while (offset < bytes.length - 8) {
+            if (offset + 4 >= bytes.length) break;
+            
+            const chunkType = String.fromCharCode(
+                bytes[offset], 
+                bytes[offset + 1], 
+                bytes[offset + 2], 
+                bytes[offset + 3]
+            );
+            
+            debug.log('Found WebP chunk:', chunkType, 'at offset', offset);
+            
+            // Check for VP8X chunk (extended format)
+            if (chunkType === 'VP8X') {
+                // VP8X has flags at offset+8, animation flag is bit 1 (0x02)
+                if (offset + 8 < bytes.length) {
+                    const flags = bytes[offset + 8];
+                    const hasAnimation = (flags & 0x02) !== 0;
+                    debug.log('VP8X flags:', flags.toString(16), 'hasAnimation:', hasAnimation);
+                    return hasAnimation;
+                }
+            }
+            
+            // Check for ANIM chunk (animation parameters)
+            if (chunkType === 'ANIM') {
+                debug.log('Found ANIM chunk - WebP is animated');
+                return true;
+            }
+            
+            // Check for ANMF chunk (animation frame)
+            if (chunkType === 'ANMF') {
+                debug.log('Found ANMF chunk - WebP is animated');
+                return true;
+            }
+            
+            // Move to next chunk
+            if (offset + 7 >= bytes.length) break;
+            
+            // Read chunk size (little-endian)
+            const chunkSize = bytes[offset + 4] | 
+                            (bytes[offset + 5] << 8) | 
+                            (bytes[offset + 6] << 16) | 
+                            (bytes[offset + 7] << 24);
+            
+            // Move to next chunk (8 bytes header + chunk size, padded to even)
+            offset += 8 + Math.ceil(chunkSize / 2) * 2;
+            
+            // Safety check to prevent infinite loop
+            if (chunkSize === 0 || offset >= bytes.length) break;
+        }
+        
+        // If we didn't find animation indicators, it's likely a static WebP
+        debug.log('No animation chunks found - WebP appears to be static');
+        return false;
+        
+    } catch (error) {
+        debug.warn('Error checking WebP animation status:', error);
+        // Return null to indicate we couldn't determine the status
+        return null;
+    }
+}
+
+// Fetch image and convert to data URL (bypasses CORS)
+async function fetchImageAsDataUrl(url) {
+    try {
+        debug.log('Fetching image for conversion (background):', url);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            debug.warn('Failed to fetch image:', response.status);
+            return null;
+        }
+        
+        const blob = await response.blob();
+        
+        // Convert blob to data URL
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = () => {
+                debug.error('Failed to convert blob to data URL');
+                resolve(null);
+            };
+            reader.readAsDataURL(blob);
+        });
+        
+    } catch (error) {
+        debug.warn('Error fetching image as data URL:', error);
+        return null;
+    }
+}
+
+// Download link directly to default directory
+async function downloadLinkDirectly(url) {
+    try {
+        debug.log('Downloading link directly:', url);
+        
+        // Generate clean filename using shared function
+        const cleanFilename = generateCleanFilename(url, 'download', '-file');
+        
+        // Download using Chrome downloads API
+        const downloadId = await chrome.downloads.download({
+            url: url,
+            filename: await buildDownloadPath(cleanFilename),
+            saveAs: false // Don't prompt for save location, use default directory
+        });
+        
+        debug.log('Link download started with ID:', downloadId);
+        
+    } catch (error) {
+        debug.error('Error downloading link:', error);
+    }
+}
+
+// Download video directly to default directory
+async function downloadVideoDirectly(videoUrl, tab) {
+    try {
+        debug.log('Downloading video directly:', videoUrl);
+        
+        // Generate clean filename using shared function
+        let cleanFilename = generateCleanFilename(videoUrl, 'video', '.mp4');
+        
+        // Ensure it has a video extension if none present
+        const videoExtensions = ['.mp4', '.webm', '.ogg', '.avi', '.mov', '.wmv', '.flv', '.mkv'];
+        const hasVideoExtension = videoExtensions.some(ext => 
+            cleanFilename.toLowerCase().endsWith(ext.toLowerCase())
+        );
+        
+        if (!hasVideoExtension) {
+            // Try to detect extension from URL or default to .mp4
+            const urlLower = videoUrl.toLowerCase();
+            const detectedExt = videoExtensions.find(ext => urlLower.includes(ext.toLowerCase()));
+            cleanFilename += detectedExt || '.maybe.mp4';
+        }
+        
+        // Clean up URL - remove fragment identifiers like #t=0.01
+        let cleanUrl = videoUrl;
+        if (cleanUrl.includes('#')) {
+            cleanUrl = cleanUrl.split('#')[0];
+        }
+        
+        // Download using Chrome downloads API
+        const downloadId = await chrome.downloads.download({
+            url: cleanUrl,
+            filename: await buildDownloadPath(cleanFilename),
+            saveAs: false // Don't prompt for save location, use default directory
+        });
+        
+        debug.log('Video download started with ID:', downloadId, 'Filename:', cleanFilename);
+        
+    } catch (error) {
+        debug.error('Error downloading video:', error);
+        
+        // Fallback: try to download without custom filename
+        try {
+            await chrome.downloads.download({
+                url: videoUrl,
+                saveAs: false
+            });
+        } catch (fallbackError) {
+            debug.error('Fallback video download also failed:', fallbackError);
+        }
+    }
+}
+
+// Download image directly to default directory
+async function downloadImageDirectly(imageUrl, tab) {
+    try {
+        debug.log('Downloading image directly:', imageUrl);
+        
+        // Generate clean filename using shared function
+        let cleanFilename = generateCleanFilename(imageUrl, 'image', '.jpg');
+        
+        // Ensure it has an image extension if none present
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.tiff', '.ico'];
+        const hasImageExtension = imageExtensions.some(ext => 
+            cleanFilename.toLowerCase().endsWith(ext.toLowerCase())
+        );
+        
+        if (!hasImageExtension) {
+            // Try to detect extension from URL or default to .jpg
+            const urlLower = imageUrl.toLowerCase();
+            const detectedExt = imageExtensions.find(ext => urlLower.includes(ext.toLowerCase()));
+            cleanFilename += detectedExt || '.maybe.jpg';
+        }
+        
+        // Clean up URL - remove fragment identifiers
+        let cleanUrl = imageUrl;
+        if (cleanUrl.includes('#')) {
+            cleanUrl = cleanUrl.split('#')[0];
+        }
+        
+        // Download using Chrome downloads API
+        const downloadId = await chrome.downloads.download({
+            url: cleanUrl,
+            filename: await buildDownloadPath(cleanFilename),
+            saveAs: false // Don't prompt for save location, use default directory
+        });
+        
+        debug.log('Image download started with ID:', downloadId, 'Filename:', cleanFilename);
+        
+    } catch (error) {
+        debug.error('Error downloading image:', error);
+        
+        // Fallback: try to download without custom filename
+        try {
+            await chrome.downloads.download({
+                url: imageUrl,
+                saveAs: false
+            });
+        } catch (fallbackError) {
+            debug.error('Fallback image download also failed:', fallbackError);
+        }
+    }
+}

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Hover Save - URL 转换策略</title>
+    <link rel="stylesheet" href="strategies.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔗 缩略图直链下载</h1>
+            <p>通过配置正则，在缩略图上悬停即可下载原图</p>
+        </header>
+
+        <main>
+            <!-- 预设策略区 -->
+            <section class="section">
+                <h2>内置预设</h2>
+                <div class="help-text">
+                    内置的常用网站策略，可启用/禁用。启用后，在对应网站悬浮下载时会自动将缩略图 URL 转换为原始图 URL。同域名策略互斥，启用一个将自动禁用同域名的其他策略。
+                </div>
+                <div class="strategies-list" id="presets-container">
+                    <p class="empty-state">加载中...</p>
+                </div>
+            </section>
+
+            <!-- 自定义策略区 -->
+            <section class="section">
+                <h2>自定义策略</h2>
+                <div class="help-text">
+                    添加自定义 URL 转换规则。支持正则表达式匹配和替换。
+                </div>
+
+                <div class="add-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="custom-name">名称</label>
+                            <input type="text" id="custom-name" placeholder="例如：微博原图" />
+                        </div>
+                        <div class="form-group">
+                            <label for="custom-domain">域名</label>
+                            <input type="text" id="custom-domain" placeholder="例如：weibo.com" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group full-width">
+                            <label for="custom-match">匹配正则</label>
+                            <input type="text" id="custom-match" placeholder="例如：^(https?://[^?]+)\?.*$" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group full-width">
+                            <label for="custom-replace">替换字符串</label>
+                            <input type="text" id="custom-replace" placeholder="例如：$1" />
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button id="add-custom-btn" disabled>添加策略</button>
+                    </div>
+                </div>
+
+                <div class="strategies-list" id="customs-container">
+                    <p id="no-customs" class="empty-state">暂无自定义策略</p>
+                </div>
+            </section>
+
+            <!-- 测试面板 -->
+            <section class="section">
+                <h2>测试工具</h2>
+                <div class="test-panel">
+                    <div class="form-row">
+                        <div class="form-group full-width">
+                            <label for="test-url">输入测试 URL</label>
+                            <input type="text" id="test-url" placeholder="粘贴缩略图 URL 进行测试" />
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="test-match">匹配正则</label>
+                            <input type="text" id="test-match" placeholder="匹配规则" />
+                        </div>
+                        <div class="form-group">
+                            <label for="test-replace">替换字符串</label>
+                            <input type="text" id="test-replace" placeholder="替换规则" />
+                        </div>
+                        <div class="form-group form-group-btn">
+                            <button id="test-btn">测试</button>
+                        </div>
+                    </div>
+                    <div class="test-result" id="test-result"></div>
+                </div>
+            </section>
+
+            <!-- 导入/导出 -->
+            <section class="section">
+                <h2>导入/导出</h2>
+                <div class="import-export">
+                    <button id="export-btn">导出策略</button>
+                    <button id="import-btn">导入策略</button>
+                    <input type="file" id="import-file" accept=".json" style="display:none" />
+                </div>
+            </section>
+
+            <!-- 示例 -->
+            <section class="section examples-section">
+                <h3>规则示例</h3>
+                <ul class="examples">
+                    <li><code>匹配: ^(https?://pbs\.twimg\.com/media/[^?]+)\?format=(\w+)&name=.*$</code><br><code>替换: $1.$2:orig</code> — Twitter/X 缩略图转原图</li>
+                    <li><code>匹配: ^(https?://preview\.redd\.it/[^?]+)\?.*$</code><br><code>替换: $1</code> — Reddit 去除查询参数</li>
+                    <li><code>匹配: ^https?://i\.imgur\.com/(\w+)([tsmlbh])?\.(\w+)$</code><br><code>替换: https://i.imgur.com/$1.$3</code> — Imgur 去除缩略图后缀</li>
+                </ul>
+            </section>
+        </main>
+
+        <footer>
+            <div class="storage-status">
+                <span id="storage-type">设置将同步到所有设备</span>
+            </div>
+            <div class="status" id="status"></div>
+            <div class="navigation">
+                <button id="back-btn" class="back-btn">← 返回设置</button>
+            </div>
+            <div class="copyright">© 2025 @thejjw • <span id="version"></span></div>
+        </footer>
+    </div>
+
+    <script src="strategies.js"></script>
+</body>
+</html>
