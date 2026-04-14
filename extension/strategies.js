@@ -1,5 +1,5 @@
-// URL 转换策略管理页面 JavaScript for Image Hover Save Extension
-// Copyright (c) Jaewoo Jeon (@thejjw) and Image Hover Save Extension Contributors
+// URL 转换策略管理页面 JavaScript for Image Harvester
+// Copyright (c) Jaewoo Jeon (@thejjw) and Image Harvester Contributors
 // SPDX-License-Identifier: zlib-acknowledgement
 
 const EXTENSION_VERSION = '1.4.2';
@@ -7,17 +7,269 @@ const EXTENSION_VERSION = '1.4.2';
 const DEBUG = false;
 
 const debug = {
-    log: (...args) => DEBUG && console.log('[IHS Strategies]', ...args),
-    error: (...args) => DEBUG && console.error('[IHS Strategies]', ...args),
-    warn: (...args) => DEBUG && console.warn('[IHS Strategies]', ...args),
-    info: (...args) => DEBUG && console.info('[IHS Strategies]', ...args)
+    log: (...args) => DEBUG && console.log('[IH Strategies]', ...args),
+    error: (...args) => DEBUG && console.error('[IH Strategies]', ...args),
+    warn: (...args) => DEBUG && console.warn('[IH Strategies]', ...args),
+    info: (...args) => DEBUG && console.info('[IH Strategies]', ...args)
+};
+
+// ====== i18n Internationalization Module ======
+const i18n = {
+    currentLocale: 'auto',
+
+    translations: {
+        en: {
+            // 页面标题
+            strategiesPageTitle: 'Image Harvester - URL Transform Strategies',
+            strategiesTitle: '🔗 Thumbnail Direct Download',
+            strategiesSubtitle: 'Configure regex rules to download original images directly from thumbnails on hover',
+
+            // 预设区
+            presetSection: 'Built-in Presets',
+            presetHelp: 'Built-in strategies for common websites. Enable/disable as needed. When enabled, the extension automatically converts thumbnail URLs to original image URLs on the corresponding website. Strategies for the same domain are mutually exclusive — enabling one will disable others for that domain.',
+            loading: 'Loading...',
+
+            // 自定义区
+            customSection: 'Custom Strategies',
+            customHelp: 'Add custom URL transformation rules. Supports regex matching and replacement.',
+            nameLabel: 'Name',
+            domainLabel: 'Domain',
+            matchLabel: 'Match Regex',
+            replaceLabel: 'Replace String',
+            namePlaceholder: 'e.g. Weibo Original',
+            domainPlaceholder: 'e.g. weibo.com',
+            matchPlaceholder: 'e.g. ^(https?://[^?]+)\\?.*$',
+            replacePlaceholder: 'e.g. $1',
+            addStrategyBtn: 'Add Strategy',
+            emptyPresets: 'No preset strategies',
+            emptyCustoms: 'No custom strategies',
+
+            // 测试区
+            testSection: 'Test Tool',
+            testUrlLabel: 'Test URL',
+            testMatchLabel: 'Match Regex',
+            testReplaceLabel: 'Replace String',
+            testUrlPlaceholder: 'Paste a thumbnail URL to test',
+            testMatchPlaceholder: 'Match rule',
+            testReplacePlaceholder: 'Replace rule',
+            testBtn: 'Test',
+            testFillAllFields: 'Please fill in all fields',
+            testSuccess: 'Match successful',
+            testUrlOriginal: 'Original:',
+            testUrlResult: 'Result:',
+            testNoMatch: 'No match — the regex does not match the input URL',
+            testRegexError: 'Regex error: ',
+
+            // 导入导出
+            importExportSection: 'Import / Export',
+            exportBtn: 'Export Strategies',
+            importBtn: 'Import Strategies',
+
+            // 示例
+            examplesTitle: 'Rule Examples',
+            exampleTwitter: '<code>Match: ^(https?://pbs\\.twimg\\.com/media/[^?]+)\\?format=(\\w+)&name=.*$</code><br><code>Replace: $1.$2:orig</code> — Twitter/X thumbnail to original',
+            exampleReddit: '<code>Match: ^(https?://preview\\.redd\\.it/[^?]+)\\?.*$</code><br><code>Replace: $1</code> — Reddit remove query parameters',
+            exampleImgur: '<code>Match: ^https?://i\\.imgur\\.com/(\\w+)([tsmlbh])?\\.(\\w+)$</code><br><code>Replace: https://i.imgur.com/$1.$3</code> — Imgur remove thumbnail suffix',
+
+            // 底部
+            storageSyncStatus: '☁️ Settings will be synced across your devices',
+            backBtn: '← Back to Settings',
+
+            // 验证
+            errorDomainEmpty: 'Domain cannot be empty',
+            errorDomainInvalid: 'Invalid domain format',
+            errorRegexEmpty: 'Regex cannot be empty',
+            errorRegexInvalid: 'Invalid regex: ',
+
+            // 状态消息
+            statusLoadFailed: 'Failed to load strategies',
+            statusSaved: 'Settings saved',
+            statusSaveFailed: 'Failed to save settings',
+            statusExported: 'Strategies exported',
+            statusInvalidFormat: 'Invalid file format',
+            statusInvalidData: 'File contains invalid strategy data',
+            statusImported: 'Imported {count} strategies',
+            statusImportFailed: 'Import failed: ',
+            statusRegexInvalidForStrategy: 'Invalid regex in strategy "{name}": {error}',
+
+            // 预设策略名称
+            presetWallhaven: 'Wallhaven Original',
+            presetPixiv: 'Pixiv Original',
+            presetTwitterOrig: 'Twitter/X Original',
+            presetTwitterLarge: 'Twitter/X Large',
+            presetReddit: 'Reddit Original',
+            presetImgur: 'Imgur Direct',
+            presetInstagram: 'Instagram CDN',
+
+            // 实验性说明
+            experimentalBadge: 'Experimental',
+            experimentalTag: 'Experimental',
+            experimentalNoteWallhaven: 'When enabled, hovering over thumbnails on Wallhaven search pages will detect images behind page overlays and automatically select the original image URL based on format indicators (PNG/JPG). Websites without a matching strategy are not affected.',
+            experimentalNotePixiv: 'When enabled, hovering over thumbnails on Pixiv pages will query the Pixiv API for the original image\'s actual format (PNG/JPG) and download the original. Requires Pixiv login and must be used on Pixix pages. Results are cached for 10 minutes to reduce API requests.',
+            experimentalNoteDefault: 'Experimental feature. When enabled, the extension will attempt to retrieve the original image URL.',
+
+            // 策略卡片
+            removeBtn: 'Remove'
+        },
+
+        zh_CN: {
+            // 页面标题
+            strategiesPageTitle: 'Image Harvester - URL 转换策略',
+            strategiesTitle: '🔗 缩略图直链下载',
+            strategiesSubtitle: '通过配置正则，在缩略图上悬停即可下载原图',
+
+            // 预设区
+            presetSection: '内置预设',
+            presetHelp: '内置的常用网站策略，可启用/禁用。启用后，在对应网站悬浮下载时会自动将缩略图 URL 转换为原始图 URL。同域名策略互斥，启用一个将自动禁用同域名的其他策略。',
+            loading: '加载中...',
+
+            // 自定义区
+            customSection: '自定义策略',
+            customHelp: '添加自定义 URL 转换规则。支持正则表达式匹配和替换。',
+            nameLabel: '名称',
+            domainLabel: '域名',
+            matchLabel: '匹配正则',
+            replaceLabel: '替换字符串',
+            namePlaceholder: '例如：微博原图',
+            domainPlaceholder: '例如：weibo.com',
+            matchPlaceholder: '例如：^(https?://[^?]+)\\?.*$',
+            replacePlaceholder: '例如：$1',
+            addStrategyBtn: '添加策略',
+            emptyPresets: '无预设策略',
+            emptyCustoms: '暂无自定义策略',
+
+            // 测试区
+            testSection: '测试工具',
+            testUrlLabel: '输入测试 URL',
+            testMatchLabel: '匹配正则',
+            testReplaceLabel: '替换字符串',
+            testUrlPlaceholder: '粘贴缩略图 URL 进行测试',
+            testMatchPlaceholder: '匹配规则',
+            testReplacePlaceholder: '替换规则',
+            testBtn: '测试',
+            testFillAllFields: '请填写所有字段',
+            testSuccess: '匹配成功',
+            testUrlOriginal: '原始:',
+            testUrlResult: '结果:',
+            testNoMatch: '不匹配 — 该正则不匹配输入的 URL',
+            testRegexError: '正则错误: ',
+
+            // 导入导出
+            importExportSection: '导入/导出',
+            exportBtn: '导出策略',
+            importBtn: '导入策略',
+
+            // 示例
+            examplesTitle: '规则示例',
+            exampleTwitter: '<code>匹配: ^(https?://pbs\\.twimg\\.com/media/[^?]+)\\?format=(\\w+)&name=.*$</code><br><code>替换: $1.$2:orig</code> — Twitter/X 缩略图转原图',
+            exampleReddit: '<code>匹配: ^(https?://preview\\.redd\\.it/[^?]+)\\?.*$</code><br><code>替换: $1</code> — Reddit 去除查询参数',
+            exampleImgur: '<code>匹配: ^https?://i\\.imgur\\.com/(\\w+)([tsmlbh])?\\.(\\w+)$</code><br><code>替换: https://i.imgur.com/$1.$3</code> — Imgur 去除缩略图后缀',
+
+            // 底部
+            storageSyncStatus: '☁️ 设置将同步到所有设备',
+            backBtn: '← 返回设置',
+
+            // 验证
+            errorDomainEmpty: '域名不能为空',
+            errorDomainInvalid: '域名格式无效',
+            errorRegexEmpty: '正则不能为空',
+            errorRegexInvalid: '正则表达式无效: ',
+
+            // 状态消息
+            statusLoadFailed: '加载策略失败',
+            statusSaved: '设置已保存',
+            statusSaveFailed: '保存设置失败',
+            statusExported: '策略已导出',
+            statusInvalidFormat: '无效的文件格式',
+            statusInvalidData: '文件包含无效的策略数据',
+            statusImported: '已导入 {count} 条策略',
+            statusImportFailed: '导入失败: ',
+            statusRegexInvalidForStrategy: '策略 "{name}" 的正则无效: {error}',
+
+            // 预设策略名称
+            presetWallhaven: 'Wallhaven 原图',
+            presetPixiv: 'Pixiv 原图',
+            presetTwitterOrig: 'Twitter/X 原图',
+            presetTwitterLarge: 'Twitter/X 大图',
+            presetReddit: 'Reddit 原图',
+            presetImgur: 'Imgur 直链',
+            presetInstagram: 'Instagram CDN',
+
+            // 实验性说明
+            experimentalBadge: '实验性',
+            experimentalTag: '实验性',
+            experimentalNoteWallhaven: '启用后，在 Wallhaven 搜索页悬停缩略图时，扩展会穿透页面叠加层检测被遮挡的图片元素，并根据页面中的格式标识（PNG/JPG）自动选择对应的原图 URL，无匹配策略的网站不受影响。',
+            experimentalNotePixiv: '启用后，在 Pixiv 页面悬停缩略图时，扩展会通过 Pixiv API 查询原图的真实格式（PNG/JPG）并下载原图，需要登录 Pixiv 并在 Pixiv 页面上使用，结果会缓存 10 分钟以减少 API 请求。',
+            experimentalNoteDefault: '实验性功能，启用后将尝试获取原图 URL。',
+
+            // 策略卡片
+            removeBtn: '删除'
+        }
+    },
+
+    getBrowserLocale() {
+        try {
+            const lang = chrome.i18n.getUILanguage();
+            if (lang.startsWith('zh')) return 'zh_CN';
+        } catch (e) {
+            debug.error('Could not detect browser locale:', e.message);
+        }
+        return 'en';
+    },
+
+    getEffectiveLocale() {
+        return this.currentLocale === 'auto' ? this.getBrowserLocale() : this.currentLocale;
+    },
+
+    t(key) {
+        const locale = this.getEffectiveLocale();
+        const table = this.translations[locale] || this.translations.en;
+        return table[key] || key;
+    },
+
+    tf(key, params = {}) {
+        let str = this.t(key);
+        for (const [k, v] of Object.entries(params)) {
+            str = str.replace(`{${k}}`, String(v));
+        }
+        return str;
+    },
+
+    applyToDOM() {
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            const translated = this.t(key);
+            // 示例列表含 HTML，使用 innerHTML
+            if (key.startsWith('example')) {
+                el.innerHTML = translated;
+            } else {
+                el.textContent = translated;
+            }
+        });
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            const key = el.getAttribute('data-i18n-placeholder');
+            el.placeholder = this.t(key);
+        });
+    },
+
+    async init() {
+        try {
+            const saved = await storage.get('ih_ui_language');
+            this.currentLocale = saved || 'auto';
+            this.applyToDOM();
+            // 设置页面标题
+            document.title = this.t('strategiesPageTitle');
+        } catch (err) {
+            debug.error('i18n init failed:', err.message);
+        }
+    }
 };
 
 // 内置预设策略
 const PRESET_STRATEGIES = [
     {
         id: 'wallhaven-original',
-        name: 'Wallhaven 原图',
+        name: 'presetWallhaven',
         domainPattern: 'th.wallhaven.cc',
         enabled: false,
         isPreset: true,
@@ -26,7 +278,7 @@ const PRESET_STRATEGIES = [
     },
     {
         id: 'pixiv-original',
-        name: 'Pixiv 原图',
+        name: 'presetPixiv',
         domainPattern: 'pximg.net',
         enabled: false,
         isPreset: true,
@@ -35,7 +287,7 @@ const PRESET_STRATEGIES = [
     },
     {
         id: 'twitter-x-orig',
-        name: 'Twitter/X 原图',
+        name: 'presetTwitterOrig',
         domainPattern: 'twimg.com',
         enabled: false,
         isPreset: true,
@@ -48,7 +300,7 @@ const PRESET_STRATEGIES = [
     },
     {
         id: 'twitter-x-large',
-        name: 'Twitter/X 大图',
+        name: 'presetTwitterLarge',
         domainPattern: 'twimg.com',
         enabled: false,
         isPreset: true,
@@ -61,7 +313,7 @@ const PRESET_STRATEGIES = [
     },
     {
         id: 'reddit-preview',
-        name: 'Reddit 原图',
+        name: 'presetReddit',
         domainPattern: 'redd.it',
         enabled: false,
         isPreset: true,
@@ -78,7 +330,7 @@ const PRESET_STRATEGIES = [
     },
     {
         id: 'imgur-direct',
-        name: 'Imgur 直链',
+        name: 'presetImgur',
         domainPattern: 'imgur.com',
         enabled: false,
         isPreset: true,
@@ -91,7 +343,7 @@ const PRESET_STRATEGIES = [
     },
     {
         id: 'instagram-cdn',
-        name: 'Instagram CDN',
+        name: 'presetInstagram',
         domainPattern: 'cdninstagram.com',
         enabled: false,
         isPreset: true,
@@ -141,7 +393,7 @@ class UrlStrategies {
 
     async loadStrategies() {
         try {
-            const saved = await storage.get('ihs_url_strategies');
+            const saved = await storage.get('ih_url_strategies');
             if (!saved || !Array.isArray(saved) || saved.length === 0) {
                 // 首次使用，初始化预设
                 this.strategies = JSON.parse(JSON.stringify(PRESET_STRATEGIES));
@@ -153,7 +405,7 @@ class UrlStrategies {
             debug.log('策略已加载:', this.strategies.length);
         } catch (error) {
             debug.error('加载策略失败:', error);
-            this.showStatus('加载策略失败', 'error');
+            this.showStatus(i18n.t('statusLoadFailed'), 'error');
         }
     }
 
@@ -188,16 +440,16 @@ class UrlStrategies {
 
     async saveStrategies(silent = false) {
         try {
-            const success = await storage.set('ihs_url_strategies', this.strategies);
+            const success = await storage.set('ih_url_strategies', this.strategies);
             if (success) {
                 debug.log('策略已保存');
-                if (!silent) this.showStatus('设置已保存', 'success');
+                if (!silent) this.showStatus(i18n.t('statusSaved'), 'success');
             } else {
                 throw new Error('Storage 操作失败');
             }
         } catch (error) {
             debug.error('保存策略失败:', error);
-            this.showStatus('保存设置失败', 'error');
+            this.showStatus(i18n.t('statusSaveFailed'), 'error');
         }
     }
 
@@ -264,7 +516,7 @@ class UrlStrategies {
         const presets = this.strategies.filter(s => s.isPreset);
 
         if (presets.length === 0) {
-            container.innerHTML = '<p class="empty-state">无预设策略</p>';
+            container.innerHTML = `<p class="empty-state">${i18n.t('emptyPresets')}</p>`;
             return;
         }
 
@@ -280,13 +532,21 @@ class UrlStrategies {
         const customs = this.strategies.filter(s => !s.isPreset);
 
         if (customs.length === 0) {
-            container.innerHTML = '<p class="empty-state">暂无自定义策略</p>';
+            container.innerHTML = `<p class="empty-state">${i18n.t('emptyCustoms')}</p>`;
             return;
         }
 
         customs.forEach(strategy => {
             container.appendChild(this.createStrategyCard(strategy, false));
         });
+    }
+
+    /** 获取策略显示名称（预设策略走 i18n，自定义策略直接显示） */
+    getStrategyDisplayName(strategy) {
+        if (strategy.isPreset && strategy.name.startsWith('preset')) {
+            return i18n.t(strategy.name);
+        }
+        return strategy.name;
     }
 
     createStrategyCard(strategy, isPreset) {
@@ -306,20 +566,20 @@ class UrlStrategies {
 
         // 实验性功能说明文案
         const experimentalNotes = {
-            wallhaven: '启用后，在 Wallhaven 搜索页悬停缩略图时，扩展会穿透页面叠加层检测被遮挡的图片元素，并根据页面中的格式标识（PNG/JPG）自动选择对应的原图 URL。无匹配策略的网站不受影响。',
-            pixiv: '启用后，在 Pixiv 页面悬停缩略图时，扩展会通过 Pixiv API 查询原图的真实格式（PNG/JPG）并下载原图。需要登录 Pixiv 并在 Pixiv 页面上使用。结果会缓存 10 分钟以减少 API 请求。'
+            wallhaven: i18n.t('experimentalNoteWallhaven'),
+            pixiv: i18n.t('experimentalNotePixiv')
         };
         const experimentalNote = strategy.experimental
             ? `<div class="experimental-note">
-                <span class="experimental-badge">实验性</span>
-                <span>${experimentalNotes[strategy.resolver] || '实验性功能，启用后将尝试获取原图 URL。'}</span>
+                <span class="experimental-badge">${i18n.t('experimentalBadge')}</span>
+                <span>${experimentalNotes[strategy.resolver] || i18n.t('experimentalNoteDefault')}</span>
               </div>`
             : '';
 
         card.innerHTML = `
             <div class="strategy-header">
                 <div class="strategy-info">
-                    <span class="strategy-name">${this.escapeHtml(strategy.name)}${strategy.experimental ? ' <span class="experimental-tag">实验性</span>' : ''}</span>
+                    <span class="strategy-name">${this.escapeHtml(this.getStrategyDisplayName(strategy))}${strategy.experimental ? ` <span class="experimental-tag">${i18n.t('experimentalTag')}</span>` : ''}</span>
                     <span class="strategy-domain">${this.escapeHtml(strategy.domainPattern)}</span>
                 </div>
                 <div class="strategy-actions">
@@ -327,7 +587,7 @@ class UrlStrategies {
                         <input type="checkbox" class="toggle-enabled" data-id="${this.escapeHtml(strategy.id)}" ${strategy.enabled ? 'checked' : ''} />
                         <span class="toggle-switch"></span>
                     </label>
-                    ${!isPreset ? `<button class="remove-btn" data-id="${this.escapeHtml(strategy.id)}">删除</button>` : ''}
+                    ${!isPreset ? `<button class="remove-btn" data-id="${this.escapeHtml(strategy.id)}">${i18n.t('removeBtn')}</button>` : ''}
                 </div>
             </div>
             ${rulesSection}
@@ -416,19 +676,19 @@ class UrlStrategies {
     }
 
     validateDomain(domain) {
-        if (!domain) return { valid: false, error: '域名不能为空' };
+        if (!domain) return { valid: false, error: i18n.t('errorDomainEmpty') };
         const domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-        if (!domainRegex.test(domain)) return { valid: false, error: '域名格式无效' };
+        if (!domainRegex.test(domain)) return { valid: false, error: i18n.t('errorDomainInvalid') };
         return { valid: true };
     }
 
     validateRegex(pattern) {
-        if (!pattern) return { valid: false, error: '正则不能为空' };
+        if (!pattern) return { valid: false, error: i18n.t('errorRegexEmpty') };
         try {
             new RegExp(pattern);
             return { valid: true };
         } catch (e) {
-            return { valid: false, error: '正则表达式无效: ' + e.message };
+            return { valid: false, error: i18n.t('errorRegexInvalid') + e.message };
         }
     }
 
@@ -439,7 +699,7 @@ class UrlStrategies {
         const resultEl = document.getElementById('test-result');
 
         if (!url || !match || !replace) {
-            resultEl.innerHTML = '<span class="test-error">请填写所有字段</span>';
+            resultEl.innerHTML = `<span class="test-error">${i18n.t('testFillAllFields')}</span>`;
             return;
         }
 
@@ -449,15 +709,15 @@ class UrlStrategies {
                 const transformed = url.replace(regex, replace);
                 resultEl.innerHTML = `
                     <div class="test-success">
-                        <div class="test-label">匹配成功</div>
-                        <div class="test-url-original">原始: <code>${this.escapeHtml(url)}</code></div>
-                        <div class="test-url-result">结果: <code>${this.escapeHtml(transformed)}</code></div>
+                        <div class="test-label">${i18n.t('testSuccess')}</div>
+                        <div class="test-url-original">${i18n.t('testUrlOriginal')} <code>${this.escapeHtml(url)}</code></div>
+                        <div class="test-url-result">${i18n.t('testUrlResult')} <code>${this.escapeHtml(transformed)}</code></div>
                     </div>`;
             } else {
-                resultEl.innerHTML = '<span class="test-error">不匹配 — 该正则不匹配输入的 URL</span>';
+                resultEl.innerHTML = `<span class="test-error">${i18n.t('testNoMatch')}</span>`;
             }
         } catch (e) {
-            resultEl.innerHTML = `<span class="test-error">正则错误: ${this.escapeHtml(e.message)}</span>`;
+            resultEl.innerHTML = `<span class="test-error">${i18n.t('testRegexError')}${this.escapeHtml(e.message)}</span>`;
         }
     }
 
@@ -467,10 +727,10 @@ class UrlStrategies {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'ihs-url-strategies.json';
+        a.download = 'ih-url-strategies.json';
         a.click();
         URL.revokeObjectURL(url);
-        this.showStatus('策略已导出', 'success');
+        this.showStatus(i18n.t('statusExported'), 'success');
     }
 
     async importStrategies(e) {
@@ -482,20 +742,20 @@ class UrlStrategies {
             const imported = JSON.parse(text);
 
             if (!Array.isArray(imported)) {
-                this.showStatus('无效的文件格式', 'error');
+                this.showStatus(i18n.t('statusInvalidFormat'), 'error');
                 return;
             }
 
             // 验证每条策略
             for (const s of imported) {
                 if (!s.id || !s.name || !s.domainPattern || !Array.isArray(s.rules)) {
-                    this.showStatus('文件包含无效的策略数据', 'error');
+                    this.showStatus(i18n.t('statusInvalidData'), 'error');
                     return;
                 }
                 for (const r of s.rules) {
                     const v = this.validateRegex(r.match);
                     if (!v.valid) {
-                        this.showStatus(`策略 "${s.name}" 的正则无效: ${v.error}`, 'error');
+                        this.showStatus(i18n.tf('statusRegexInvalidForStrategy', { name: s.name, error: v.error }), 'error');
                         return;
                     }
                 }
@@ -516,10 +776,10 @@ class UrlStrategies {
 
             await this.saveStrategies();
             this.renderAll();
-            this.showStatus(`已导入 ${imported.length} 条策略`, 'success');
+            this.showStatus(i18n.tf('statusImported', { count: imported.length }), 'success');
         } catch (error) {
             debug.error('导入失败:', error);
-            this.showStatus('导入失败: ' + error.message, 'error');
+            this.showStatus(i18n.t('statusImportFailed') + error.message, 'error');
         }
 
         // 重置 file input
@@ -544,10 +804,11 @@ class UrlStrategies {
 }
 
 // 初始化
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const versionElement = document.getElementById('version');
     if (versionElement) {
         versionElement.textContent = `v${EXTENSION_VERSION}`;
     }
+    await i18n.init();
     new UrlStrategies();
 });

@@ -1,4 +1,4 @@
-# Image Hover Save - Chrome 图片悬浮保存扩展
+# Image Harvester - Chrome 图片悬浮保存扩展
 
 一款简洁高效的 Chrome 浏览器扩展，只需将鼠标悬停在图片上即可快速下载。悬停后出现下载按钮，一键保存到本地下载文件夹。
 
@@ -60,7 +60,7 @@
 
 ### 方式一：Chrome Web Store 安装（推荐）
 
-[前往 Chrome Web Store 安装](https://chromewebstore.google.com/detail/image-hover-save/lhmljebjlhdafkminimimaokjliabegg)
+[前往 Chrome Web Store 安装](https://chromewebstore.google.com/detail/image-harvester/lhmljebjlhdafkminimimaokjliabegg)
 
 > ⚠️ Web Store 版本可能不是最新版本，如需最新功能请使用方式二。
 

@@ -51,7 +51,7 @@ The system includes robust error handling:
 - **Header parsing errors**: Safe fallback when WebP structure cannot be analyzed
 
 ## Settings Integration
-- **Storage key**: `ihs_convert_webp_to_png`
+- **Storage key**: `ih_convert_webp_to_png`
 - **Default value**: `false` (disabled by default)
 - **UI location**: Advanced settings section in popup
 - **Real-time updates**: Changes are immediately applied to active tabs
@@ -68,10 +68,10 @@ The system includes robust error handling:
 ### Enable/Disable
 ```javascript
 // Enable WebP to PNG conversion
-chrome.storage.sync.set({ 'ihs_convert_webp_to_png': true });
+chrome.storage.sync.set({ 'ih_convert_webp_to_png': true });
 
 // Disable WebP to PNG conversion  
-chrome.storage.sync.set({ 'ihs_convert_webp_to_png': false });
+chrome.storage.sync.set({ 'ih_convert_webp_to_png': false });
 ```
 
 ### URLs that will be converted (static WebP only)

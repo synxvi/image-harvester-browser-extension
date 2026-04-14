@@ -1,5 +1,5 @@
-// Image Hover Save Extension - Background Script
-// Copyright (c) Jaewoo Jeon (@thejjw) and Image Hover Save Extension Contributors
+// Image Harvester - Background Script
+// Copyright (c) Jaewoo Jeon (@thejjw) and Image Harvester Contributors
 // SPDX-License-Identifier: zlib-acknowledgement
 
 // Debug flag - set to false to disable all console output
@@ -43,8 +43,8 @@ function updateBadge(disabled, excluded = false, tabId = null) {
 // Set default settings on install
 chrome.runtime.onInstalled.addListener(() => {
     chrome.storage.sync.set({
-        ihs_enabled: true,
-        ihs_hover_delay: CONFIG.DEFAULT_HOVER_DELAY
+        ih_enabled: true,
+        ih_hover_delay: CONFIG.DEFAULT_HOVER_DELAY
     });
     
     // Set initial badge state
@@ -52,7 +52,7 @@ chrome.runtime.onInstalled.addListener(() => {
     
     // Create context menu item for links
     chrome.contextMenus.create({
-        id: "ihs-download-link",
+        id: "ih-download-link",
         title: chrome.i18n.getMessage("contextMenuDownloadLink"),
         contexts: ["link"],
         documentUrlPatterns: ["http://*/*", "https://*/*"]
@@ -60,7 +60,7 @@ chrome.runtime.onInstalled.addListener(() => {
     
     // Create context menu item for videos
     chrome.contextMenus.create({
-        id: "ihs-download-video",
+        id: "ih-download-video",
         title: chrome.i18n.getMessage("contextMenuDownloadVideo"),
         contexts: ["video"],
         documentUrlPatterns: ["http://*/*", "https://*/*"]
@@ -68,7 +68,7 @@ chrome.runtime.onInstalled.addListener(() => {
     
     // Create context menu item for images
     chrome.contextMenus.create({
-        id: "ihs-download-image",
+        id: "ih-download-image",
         title: chrome.i18n.getMessage("contextMenuDownloadImage"),
         contexts: ["image"],
         documentUrlPatterns: ["http://*/*", "https://*/*"]
@@ -89,13 +89,13 @@ chrome.runtime.onInstalled.addListener(() => {
 // Helper: check if a tab's URL is excluded and update badge accordingly
 function updateBadgeForTab(tabId, url) {
     if (!url || !url.startsWith('http')) return;
-    chrome.storage.sync.get(['ihs_enabled', 'ihs_domain_exclusions'], (data) => {
-        const disabled = !data.ihs_enabled;
+    chrome.storage.sync.get(['ih_enabled', 'ih_domain_exclusions'], (data) => {
+        const disabled = !data.ih_enabled;
         if (disabled) {
             updateBadge(true, false, tabId);
             return;
         }
-        const exclusions = data.ihs_domain_exclusions || [];
+        const exclusions = data.ih_domain_exclusions || [];
         try {
             const hostname = new URL(url).hostname.toLowerCase();
             const excluded = exclusions.some(e => {
@@ -111,8 +111,8 @@ function updateBadgeForTab(tabId, url) {
 
 // On startup, set badge state for all tabs
 chrome.runtime.onStartup.addListener(() => {
-    chrome.storage.sync.get('ihs_enabled', (data) => {
-        const disabled = !data.ihs_enabled;
+    chrome.storage.sync.get('ih_enabled', (data) => {
+        const disabled = !data.ih_enabled;
         chrome.tabs.query({}, (tabs) => {
             tabs.forEach(tab => {
                 updateBadgeForTab(tab.id, tab.url);
@@ -162,8 +162,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 // Listen for storage changes to update badges
 chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (changes.ihs_enabled && areaName === 'sync') {
-        const disabled = !changes.ihs_enabled.newValue;
+    if (changes.ih_enabled && areaName === 'sync') {
+        const disabled = !changes.ih_enabled.newValue;
         debug.log('Extension enabled status changed:', !disabled);
         
         // Update badge for all tabs
@@ -174,7 +174,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
         });
     }
     
-    if (changes.ihs_domain_exclusions && areaName === 'sync') {
+    if (changes.ih_domain_exclusions && areaName === 'sync') {
         debug.log('Domain exclusions changed, content scripts will update automatically');
         // Content scripts will detect the storage change automatically
     }
@@ -182,11 +182,11 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId === "ihs-download-link") {
+    if (info.menuItemId === "ih-download-link") {
         downloadLinkDirectly(info.linkUrl);
-    } else if (info.menuItemId === "ihs-download-video") {
+    } else if (info.menuItemId === "ih-download-video") {
         downloadVideoDirectly(info.srcUrl, tab);
-    } else if (info.menuItemId === "ihs-download-image") {
+    } else if (info.menuItemId === "ih-download-image") {
         downloadImageDirectly(info.srcUrl, tab);
     }
 });
@@ -223,13 +223,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse({ success: false, dataUrl: null });
         });
         return true; // Keep message channel open for async response
-    } else if (message.type === 'ihs:domain_status_changed') {
+    } else if (message.type === 'ih:domain_status_changed') {
         // Only handle from top-level frame
         if (sender.frameId !== undefined && sender.frameId !== 0) {
             return;
         }
         // Badge is managed by background via onActivated/onUpdated, ignore duplicate updates
-    } else if (message.type === 'ihs:request_referer_rule') {
+    } else if (message.type === 'ih:request_referer_rule') {
         addRefererRule(message.mediaHost, message.referer).catch(e => {
             debug.error('Failed to update referer rule:', e);
         });
@@ -379,8 +379,8 @@ async function getImageFromCache(url) {
 // Get configured download subfolder from storage
 async function getDownloadSubfolder() {
     try {
-        const data = await chrome.storage.sync.get('ihs_download_subfolder');
-        let subfolder = data.ihs_download_subfolder;
+        const data = await chrome.storage.sync.get('ih_download_subfolder');
+        let subfolder = data.ih_download_subfolder;
         if (subfolder && typeof subfolder === 'string') {
             // Sanitize: strip illegal characters, leading/trailing slashes
             subfolder = subfolder.replace(/[<>:"\\|?*]/g, '').replace(/^[/\\]+|[/\\]+$/g, '');
@@ -397,8 +397,8 @@ async function getDownloadSubfolder() {
 // Build full download path by prepending base subfolder + configured subfolder or multi-path subfolder
 async function getBaseSubfolder() {
     try {
-        const data = await chrome.storage.sync.get('ihs_base_subfolder');
-        let baseSubfolder = data.ihs_base_subfolder;
+        const data = await chrome.storage.sync.get('ih_base_subfolder');
+        let baseSubfolder = data.ih_base_subfolder;
         if (baseSubfolder && typeof baseSubfolder === 'string') {
             // Sanitize: strip illegal characters, leading/trailing slashes
             baseSubfolder = baseSubfolder.replace(/[<>:"\\|?*]/g, '').replace(/^[/\\]+|[/\\]+$/g, '');
@@ -447,8 +447,8 @@ async function buildDownloadPath(filename, pathIndex = -1) {
 // Get configured multi-paths from storage
 async function getMultiPaths() {
     try {
-        const data = await chrome.storage.sync.get('ihs_multi_paths');
-        const paths = data.ihs_multi_paths;
+        const data = await chrome.storage.sync.get('ih_multi_paths');
+        const paths = data.ih_multi_paths;
         if (Array.isArray(paths)) return paths;
     } catch (error) {
         debug.error('Error getting multi paths:', error);

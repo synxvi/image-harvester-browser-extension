@@ -1,5 +1,5 @@
-// Image Hover Save Extension - Content Script
-// Copyright (c) Jaewoo Jeon (@thejjw) and Image Hover Save Extension Contributors
+// Image Harvester - Content Script
+// Copyright (c) Jaewoo Jeon (@thejjw) and Image Harvester Contributors
 // SPDX-License-Identifier: zlib-acknowledgement
 
 // Debug flag - set to false to disable all console output
@@ -172,12 +172,12 @@ function generateBorderCSS() {
     const greenColor = CONFIG.BORDER_COLORS.green;
     
     return `
-.ihs-border-highlight-gray {
+.ih-border-highlight-gray {
     outline: ${CONFIG.BORDER_WIDTH} ${CONFIG.BORDER_STYLE} ${grayColor} !important;
     outline-offset: 1px !important;
     transition: outline 0.2s ease !important;
 }
-.ihs-border-highlight-green {
+.ih-border-highlight-green {
     outline: ${CONFIG.BORDER_WIDTH} ${CONFIG.BORDER_STYLE} ${greenColor} !important;
     outline-offset: 1px !important;
     transition: outline 0.2s ease !important;
@@ -187,9 +187,9 @@ function generateBorderCSS() {
 
 // Inject border CSS
 function injectBorderCSS() {
-    if (!document.getElementById('ihs-border-styles')) {
+    if (!document.getElementById('ih-border-styles')) {
         const style = document.createElement('style');
-        style.id = 'ihs-border-styles';
+        style.id = 'ih-border-styles';
         style.textContent = generateBorderCSS();
         document.head.appendChild(style);
     }
@@ -203,14 +203,14 @@ function toggleBorderHighlight(element, show) {
     if (!element || !element.classList) return;
     
     // Remove any existing border classes
-    const classesToRemove = Array.from(element.classList).filter(cls => cls.startsWith('ihs-border-highlight-'));
+    const classesToRemove = Array.from(element.classList).filter(cls => cls.startsWith('ih-border-highlight-'));
     element.classList.remove(...classesToRemove);
     
     if (show) {
         if (borderHighlightMode === 'gray') {
-            element.classList.add('ihs-border-highlight-gray');
+            element.classList.add('ih-border-highlight-gray');
         } else if (borderHighlightMode === 'green') {
-            element.classList.add('ihs-border-highlight-green');
+            element.classList.add('ih-border-highlight-green');
         }
     }
 }
@@ -346,31 +346,31 @@ const strategyResolvers = {
 // Initialize extension settings
 async function initializeExtension() {
     try {
-        const enabled = await storage.get('ihs_enabled');
-        const delay = await storage.get('ihs_hover_delay');
-        const minSize = await storage.get('ihs_min_image_size');
-        const imgDetect = await storage.get('ihs_detect_img');
-        const videoDetect = await storage.get('ihs_detect_video');
-        const svgDetect = await storage.get('ihs_detect_svg');
-        const bgDetect = await storage.get('ihs_detect_background');
-        const webpToPngConvert = await storage.get('ihs_convert_webp_to_png');
-        const borderHighlight = await storage.get('ihs_border_highlight_mode');
-        const longHideDelaySetting = await storage.get('ihs_long_hide_delay');
-        const multiPathEnabledSetting = await storage.get('ihs_multi_path_enabled');
-        const multiPathsSetting = await storage.get('ihs_multi_paths');
-        const downloadModeSetting = await storage.get('ihs_download_mode');
+        const enabled = await storage.get('ih_enabled');
+        const delay = await storage.get('ih_hover_delay');
+        const minSize = await storage.get('ih_min_image_size');
+        const imgDetect = await storage.get('ih_detect_img');
+        const videoDetect = await storage.get('ih_detect_video');
+        const svgDetect = await storage.get('ih_detect_svg');
+        const bgDetect = await storage.get('ih_detect_background');
+        const webpToPngConvert = await storage.get('ih_convert_webp_to_png');
+        const borderHighlight = await storage.get('ih_border_highlight_mode');
+        const longHideDelaySetting = await storage.get('ih_long_hide_delay');
+        const multiPathEnabledSetting = await storage.get('ih_multi_path_enabled');
+        const multiPathsSetting = await storage.get('ih_multi_paths');
+        const downloadModeSetting = await storage.get('ih_download_mode');
 
         // 加载 URL 转换策略（合并内置预设，确保新预设自动补充）
-        const strategiesSetting = await storage.get('ihs_url_strategies');
+        const strategiesSetting = await storage.get('ih_url_strategies');
         urlStrategies = mergeStrategiesWithPresets(strategiesSetting);
         // 如果合并后有新增预设，写回 storage 供策略管理页同步
         if (Array.isArray(strategiesSetting) && urlStrategies.length > strategiesSetting.length) {
-            chrome.storage.sync.set({ ihs_url_strategies: urlStrategies });
+            chrome.storage.sync.set({ ih_url_strategies: urlStrategies });
         }
         activeStrategy = findMatchingStrategy(window.location.hostname);
 
         // 加载用户语言偏好
-        const savedLang = await storage.get('ihs_ui_language');
+        const savedLang = await storage.get('ih_ui_language');
         if (savedLang && savedLang !== 'auto') {
             contentLocale = savedLang;
         } else {
@@ -407,7 +407,7 @@ async function initializeExtension() {
         // Send initial domain status to background script (top frame only)
         if (window === window.top) {
             chrome.runtime.sendMessage({
-                type: 'ihs:domain_status_changed',
+                type: 'ih:domain_status_changed',
                 excluded: isDomainExcluded
             }).catch(() => {});
         }
@@ -424,7 +424,7 @@ async function initializeExtension() {
 // Create download button element
 function createDownloadButton() {
     const button = document.createElement('div');
-    button.className = 'ihs-download-btn';
+    button.className = 'ih-download-btn';
     button.innerHTML = '💾';
     button.title = activeStrategy ? `Save image (via ${activeStrategy.name})` : 'Save image';
     
@@ -443,13 +443,13 @@ function createDownloadButton() {
 // Create multi-path download toolbar (vertical button strip)
 function createDownloadToolbar(img) {
     const container = document.createElement('div');
-    container.className = 'ihs-download-toolbar';
+    container.className = 'ih-download-toolbar';
     
     const activePaths = multiPaths.filter(p => p.enabled !== false);
     
     activePaths.forEach((pathConfig, displayIndex) => {
         const btn = document.createElement('div');
-        btn.className = 'ihs-toolbar-btn';
+        btn.className = 'ih-toolbar-btn';
         
         // Use name (e.g. "📷 相册") or fallback to path folder
         const label = pathConfig.name || pathConfig.path || ('Path ' + (displayIndex + 1));
@@ -596,7 +596,7 @@ function showDownloadButton(img) {
     
     document.body.appendChild(downloadButton);
     positionButton(img, downloadButton);
-    downloadButton.style.display = downloadButton.classList.contains('ihs-download-toolbar') ? 'block' : 'flex';
+    downloadButton.style.display = downloadButton.classList.contains('ih-download-toolbar') ? 'block' : 'flex';
     currentImage = img;
 
     // 挂载观察器：跟踪图片尺寸/src 变化，实现按钮平滑跟随
@@ -625,7 +625,7 @@ let toastContainer = null;
 function getToastContainer() {
     if (!toastContainer || !document.body.contains(toastContainer)) {
         toastContainer = document.createElement('div');
-        toastContainer.className = 'ihs-toast-container';
+        toastContainer.className = 'ih-toast-container';
         document.body.appendChild(toastContainer);
     }
     return toastContainer;
@@ -634,7 +634,7 @@ function getToastContainer() {
 function showPageToast(messageKey, type = 'start') {
     const container = getToastContainer();
     const toast = document.createElement('div');
-    toast.className = `ihs-toast ihs-toast-${type}`;
+    toast.className = `ih-toast ih-toast-${type}`;
 
     // 内置翻译表，支持 popup 中用户选择的语言
     const translations = {
@@ -647,12 +647,12 @@ function showPageToast(messageKey, type = 'start') {
     const table = translations[locale] || translations.en;
     const text = table[messageKey] || translations.en[messageKey] || messageKey;
 
-    toast.innerHTML = `<span class="ihs-toast-text">${text}</span>`;
+    toast.innerHTML = `<span class="ih-toast-text">${text}</span>`;
     container.appendChild(toast);
 
     // 2.5秒后自动消失
     setTimeout(() => {
-        toast.classList.add('ihs-toast-out');
+        toast.classList.add('ih-toast-out');
         toast.addEventListener('animationend', () => {
             if (toast.parentNode) toast.parentNode.removeChild(toast);
         });
@@ -738,8 +738,8 @@ async function downloadElement(element, pathIndex = -1) {
         }
         
         // Send download request to background script
-        chrome.storage.sync.get(['ihs_download_mode'], async (result) => {
-            const downloadMode = result.ihs_download_mode || 'normal';
+        chrome.storage.sync.get(['ih_download_mode'], async (result) => {
+            const downloadMode = result.ih_download_mode || 'normal';
 
             // Helper to download a blob locally
             const downloadBlob = (blob, finalFilename) => {
@@ -1067,7 +1067,7 @@ function isCurrentDomainExcluded(exclusions) {
 // Check if extension should run on current domain
 async function checkDomainExclusion() {
     try {
-        const exclusions = await storage.get('ihs_domain_exclusions');
+        const exclusions = await storage.get('ih_domain_exclusions');
         const wasExcluded = isDomainExcluded;
         isDomainExcluded = isCurrentDomainExcluded(exclusions);
         debug.log('Domain exclusion check:', window.location.hostname, isDomainExcluded);
@@ -1075,7 +1075,7 @@ async function checkDomainExclusion() {
         // Notify background script if exclusion status changed (top frame only)
         if (wasExcluded !== isDomainExcluded && window === window.top) {
             chrome.runtime.sendMessage({
-                type: 'ihs:domain_status_changed',
+                type: 'ih:domain_status_changed',
                 excluded: isDomainExcluded
             }).catch(() => {});
         }
@@ -1134,10 +1134,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     injectBorderCSS();
                 } else {
                     // Remove all existing border highlights with proper checks
-                    document.querySelectorAll('[class*="ihs-border-highlight-"]').forEach(el => {
+                    document.querySelectorAll('[class*="ih-border-highlight-"]').forEach(el => {
                         if (el && el.classList) {
-                            // Remove all classes that start with 'ihs-border-highlight-'
-                            const classesToRemove = Array.from(el.classList).filter(cls => cls.startsWith('ihs-border-highlight-'));
+                            // Remove all classes that start with 'ih-border-highlight-'
+                            const classesToRemove = Array.from(el.classList).filter(cls => cls.startsWith('ih-border-highlight-'));
                             el.classList.remove(...classesToRemove);
                         }
                     });
@@ -1335,7 +1335,7 @@ function requestRefererRule(mediaUrl) {
         if (mediaHost && mediaHost !== currentHost && !mediaUrl.startsWith('data:')) {
             debug.log('Requesting referer spoofing for:', mediaHost);
             chrome.runtime.sendMessage({
-                type: 'ihs:request_referer_rule',
+                type: 'ih:request_referer_rule',
                 mediaHost: mediaHost,
                 referer: window.location.origin + '/'
             }).catch(() => {});
@@ -1348,31 +1348,31 @@ function requestRefererRule(mediaUrl) {
 // Listen for storage changes
 chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'sync') {
-        if (changes.ihs_enabled) {
-            isEnabled = changes.ihs_enabled.newValue !== false;
+        if (changes.ih_enabled) {
+            isEnabled = changes.ih_enabled.newValue !== false;
             debug.log('Extension enabled status changed:', isEnabled);
             if (!isEnabled) {
                 hideDownloadButton();
             }
         }
         
-        if (changes.ihs_hover_delay) {
-            hoverDelay = changes.ihs_hover_delay.newValue || CONFIG.DEFAULT_HOVER_DELAY;
+        if (changes.ih_hover_delay) {
+            hoverDelay = changes.ih_hover_delay.newValue || CONFIG.DEFAULT_HOVER_DELAY;
             debug.log('Hover delay changed:', hoverDelay);
         }
 
-        if (changes.ihs_long_hide_delay) {
-            longHideDelay = changes.ihs_long_hide_delay.newValue === true;
+        if (changes.ih_long_hide_delay) {
+            longHideDelay = changes.ih_long_hide_delay.newValue === true;
             debug.log('Long hide delay changed:', longHideDelay);
         }
         
-        if (changes.ihs_convert_webp_to_png) {
-            convertWebpToPng = changes.ihs_convert_webp_to_png.newValue === true;
+        if (changes.ih_convert_webp_to_png) {
+            convertWebpToPng = changes.ih_convert_webp_to_png.newValue === true;
             debug.log('WebP to PNG conversion changed:', convertWebpToPng);
         }
 
-        if (changes.ihs_ui_language) {
-            const newLang = changes.ihs_ui_language.newValue;
+        if (changes.ih_ui_language) {
+            const newLang = changes.ih_ui_language.newValue;
             if (newLang && newLang !== 'auto') {
                 contentLocale = newLang;
             } else {
@@ -1386,28 +1386,28 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
             debug.log('UI language changed:', contentLocale);
         }
 
-        if (changes.ihs_domain_exclusions) {
+        if (changes.ih_domain_exclusions) {
             checkDomainExclusion();
         }
         
-        if (changes.ihs_multi_path_enabled !== undefined) {
-            multiPathEnabled = changes.ihs_multi_path_enabled.newValue === true;
+        if (changes.ih_multi_path_enabled !== undefined) {
+            multiPathEnabled = changes.ih_multi_path_enabled.newValue === true;
             debug.log('Multi-path enabled changed:', multiPathEnabled);
         }
         
-        if (changes.ihs_multi_paths) {
-            const rawPaths = changes.ihs_multi_paths.newValue;
+        if (changes.ih_multi_paths) {
+            const rawPaths = changes.ih_multi_paths.newValue;
             multiPaths = (Array.isArray(rawPaths) ? rawPaths : []).filter(p => p.enabled !== false);
             debug.log('Multi-paths updated, count:', multiPaths.length);
         }
         
-        if (changes.ihs_download_mode) {
-            currentDownloadMode = changes.ihs_download_mode.newValue || 'normal';
+        if (changes.ih_download_mode) {
+            currentDownloadMode = changes.ih_download_mode.newValue || 'normal';
             debug.log('Download mode changed:', currentDownloadMode);
         }
 
-        if (changes.ihs_url_strategies) {
-            urlStrategies = changes.ihs_url_strategies.newValue || [];
+        if (changes.ih_url_strategies) {
+            urlStrategies = changes.ih_url_strategies.newValue || [];
             activeStrategy = findMatchingStrategy(window.location.hostname);
             debug.log('URL 转换策略已更新, 活跃策略:', activeStrategy ? activeStrategy.name : '无');
         }
@@ -1425,9 +1425,9 @@ document.addEventListener('mouseenter', (e) => {
     // Walk up to check if we entered the button or toolbar or any child within
     while (target && target !== document) {
         if (target.classList && (
-            target.classList.contains('ihs-download-btn') ||
-            target.classList.contains('ihs-download-toolbar') ||
-            target.classList.contains('ihs-toolbar-btn')
+            target.classList.contains('ih-download-btn') ||
+            target.classList.contains('ih-download-toolbar') ||
+            target.classList.contains('ih-toolbar-btn')
         )) {
             isMouseOverButton = true;
             return;
@@ -1441,18 +1441,18 @@ document.addEventListener('mouseleave', (e) => {
     // Check if we're leaving the button/toolbar area
     while (target && target !== document) {
         if (target.classList && (
-            target.classList.contains('ihs-download-btn') ||
-            target.classList.contains('ihs-download-toolbar') ||
-            target.classList.contains('ihs-toolbar-btn')
+            target.classList.contains('ih-download-btn') ||
+            target.classList.contains('ih-download-toolbar') ||
+            target.classList.contains('ih-toolbar-btn')
         )) {
             // Check if cursor is moving to another element INSIDE the button area
             // (e.g., from one toolbar button to another) — if so, ignore this leave
             let related = e.relatedTarget;
             while (related && related !== document) {
                 if (related.classList && (
-                    related.classList.contains('ihs-download-btn') ||
-                    related.classList.contains('ihs-download-toolbar') ||
-                    related.classList.contains('ihs-toolbar-btn')
+                    related.classList.contains('ih-download-btn') ||
+                    related.classList.contains('ih-download-toolbar') ||
+                    related.classList.contains('ih-toolbar-btn')
                 )) {
                     // Still inside button area — keep guard flag, no hide timer
                     return;

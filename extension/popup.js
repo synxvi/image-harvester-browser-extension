@@ -1,5 +1,5 @@
-// Image Hover Save Extension - Popup Script
-// Copyright (c) Jaewoo Jeon (@thejjw) and Image Hover Save Extension Contributors
+// Image Harvester - Popup Script
+// Copyright (c) Jaewoo Jeon (@thejjw) and Image Harvester Contributors
 // SPDX-License-Identifier: zlib-acknowledgement
 //
 // Third-party libraries:
@@ -13,17 +13,17 @@ const DEBUG = true; // TEMP: enable for i18n debugging
 
 // Debug console wrapper
 const debug = {
-    log: (...args) => DEBUG && console.log('[IHS]', ...args),
-    error: (...args) => DEBUG && console.error('[IHS]', ...args),
-    warn: (...args) => DEBUG && console.warn('[IHS]', ...args),
-    info: (...args) => DEBUG && console.info('[IHS]', ...args)
+    log: (...args) => DEBUG && console.log('[IH]', ...args),
+    error: (...args) => DEBUG && console.error('[IH]', ...args),
+    warn: (...args) => DEBUG && console.warn('[IH]', ...args),
+    info: (...args) => DEBUG && console.info('[IH]', ...args)
 };
 
 // Forced diagnostic logger - ALWAYS outputs regardless of DEBUG flag
 // Use this only for critical i18n/language diagnostics
 const diag = {
-    log: (...args) => console.log('[IHS-DIAG]', ...args),
-    error: (...args) => console.error('[IHS-DIAG]', ...args)
+    log: (...args) => console.log('[IH-DIAG]', ...args),
+    error: (...args) => console.error('[IH-DIAG]', ...args)
 };
 
 // Configuration
@@ -68,7 +68,7 @@ const i18n = {
             langEnglish: 'English',
             langChinese: '\u4E2D\u6587',
             langLabel: 'Language:',
-            headerTitle: 'Image Hover Save',
+            headerTitle: 'Image Harvester',
             headerSubtitle: 'Quick image download on hover',
             enableExtension: 'Enable extension',
             hoverDelay: 'Icon appear delay:',
@@ -186,7 +186,7 @@ const i18n = {
             galleryResetFilters: 'Reset Filters',
             galleryZipDownload: '\uD83D\uDDC4\uFE0F (Advanced) ZIP Download',
             galleryCorsWarning: '\u26A0\uFE0F <strong>CORS Limitations:</strong> This gallery ZIP download uses the fetch method and faces CORS restrictions. For better download success rates, use the <strong>ZIP download button in the extension popup</strong> instead - it runs with extension permissions and may allow download more images.',
-            galleryFooterLine1: '\uD83D\uDCC4 This is a temporary auto-generated gallery page created by the <strong>Image Hover Save</strong> extension v{version}',
+            galleryFooterLine1: '\uD83D\uDCC4 This is a temporary auto-generated gallery page created by the <strong>Image Harvester</strong> extension v{version}',
             galleryFooterLine2: 'This page will be lost when closed. Do all downloads you need before you close the page.',
             galleryNoImagesToDownload: 'No images to download',
             galleryCreatingZip: 'Creating ZIP file...',
@@ -431,7 +431,7 @@ const i18n = {
     async init() {
         try {
             diag.log('i18n.init() start');
-            const saved = await storage.get('ihs_ui_language');
+            const saved = await storage.get('ih_ui_language');
             this.currentLocale = saved || 'auto';
             diag.log('i18n.init() saved language from storage:', saved, ', currentLocale set to:', this.currentLocale);
 
@@ -455,7 +455,7 @@ const i18n = {
         diag.log('setLocale() called with:', locale, '(was:', this.currentLocale, ')');
         this.currentLocale = locale;
         try {
-            await storage.set('ihs_ui_language', locale);
+            await storage.set('ih_ui_language', locale);
             diag.log('setLocale() saved to storage OK');
         } catch (err) {
             diag.error('Failed to save language preference:', err.message);
@@ -490,22 +490,22 @@ async function initializePopup() {
         await i18n.init();
 
         // Load current settings
-        const enabled = await storage.get('ihs_enabled');
-        const delay = await storage.get('ihs_hover_delay');
-        const detectImg = await storage.get('ihs_detect_img');
-        const detectSvg = await storage.get('ihs_detect_svg');
-        const detectBackground = await storage.get('ihs_detect_background');
-        const detectVideo = await storage.get('ihs_detect_video');
-        const allowedExtensions = await storage.get('ihs_allowed_extensions');
-        const convertWebpToPng = await storage.get('ihs_convert_webp_to_png');
-        const borderHighlightMode = await storage.get('ihs_border_highlight_mode');
-        const longHideDelaySetting = await storage.get('ihs_long_hide_delay');
-        const downloadSubfolder = await storage.get('ihs_download_subfolder');
-        const baseSubfolder = await storage.get('ihs_base_subfolder');
+        const enabled = await storage.get('ih_enabled');
+        const delay = await storage.get('ih_hover_delay');
+        const detectImg = await storage.get('ih_detect_img');
+        const detectSvg = await storage.get('ih_detect_svg');
+        const detectBackground = await storage.get('ih_detect_background');
+        const detectVideo = await storage.get('ih_detect_video');
+        const allowedExtensions = await storage.get('ih_allowed_extensions');
+        const convertWebpToPng = await storage.get('ih_convert_webp_to_png');
+        const borderHighlightMode = await storage.get('ih_border_highlight_mode');
+        const longHideDelaySetting = await storage.get('ih_long_hide_delay');
+        const downloadSubfolder = await storage.get('ih_download_subfolder');
+        const baseSubfolder = await storage.get('ih_base_subfolder');
         
         // Multi-path settings
-        const multiPathEnabled = await storage.get('ihs_multi_path_enabled');
-        const multiPaths = await storage.get('ihs_multi_paths');
+        const multiPathEnabled = await storage.get('ih_multi_path_enabled');
+        const multiPaths = await storage.get('ih_multi_paths');
         
         // Set toggle state
         const enabledToggle = document.getElementById('enabledToggle');
@@ -528,7 +528,7 @@ async function initializePopup() {
         document.getElementById('borderHighlight' + borderMode.charAt(0).toUpperCase() + borderMode.slice(1)).checked = true;
         
         // Set experimental download mode
-        const downloadMode = await storage.get('ihs_download_mode') || 'normal';
+        const downloadMode = await storage.get('ih_download_mode') || 'normal';
         document.getElementById('downloadMode' + downloadMode.charAt(0).toUpperCase() + downloadMode.slice(1)).checked = true;
         
         // Set up download mode UI
@@ -543,7 +543,7 @@ async function initializePopup() {
         extensionsInput.value = allowedExtensions || CONFIG.DEFAULT_EXTENSIONS_STRING;
         
         // Set minimum image size
-        const minImageSize = await storage.get('ihs_min_image_size');
+        const minImageSize = await storage.get('ih_min_image_size');
         const minImageSizeInput = document.getElementById('minImageSize');
         minImageSizeInput.value = minImageSize || CONFIG.MIN_IMAGE_SIZE;
         
@@ -652,7 +652,7 @@ function setupLanguageSelectorListener() {
         diag.log('languageSelect change event fired, new value:', e.target.value);
         await i18n.setLocale(e.target.value);
         // Re-render dynamic elements that contain translated text
-        const downloadMode = await storage.get('ihs_download_mode') || 'normal';
+        const downloadMode = await storage.get('ih_download_mode') || 'normal';
         updateDownloadModeIndicator(downloadMode);
     });
 }
@@ -667,7 +667,7 @@ function setupEventListeners() {
     
     // Toggle enabled/disabled
     enabledToggle.addEventListener('change', async (e) => {
-        const success = await storage.set('ihs_enabled', e.target.checked);
+        const success = await storage.set('ih_enabled', e.target.checked);
         if (success) {
             showStatus(e.target.checked ? i18n.t('statusEnabled') : i18n.t('statusDisabled'));
         } else {
@@ -683,7 +683,7 @@ function setupEventListeners() {
     
     hoverDelay.addEventListener('change', async (e) => {
         const value = parseInt(e.target.value);
-        const success = await storage.set('ihs_hover_delay', value);
+        const success = await storage.set('ih_hover_delay', value);
         if (success) {
             showStatus(i18n.tf('statusDelaySet', { value: (value / 1000).toFixed(1) }));
         } else {
@@ -723,7 +723,7 @@ function setupImageDetectionListeners() {
     
     // Image type detection checkboxes
     detectImg.addEventListener('change', async (e) => {
-        const success = await storage.set('ihs_detect_img', e.target.checked);
+        const success = await storage.set('ih_detect_img', e.target.checked);
         if (success) {
             showStatus(e.target.checked ? i18n.t('statusImgDetOn') : i18n.t('statusImgDetOff'));
             await notifyContentScriptSettingsChanged();
@@ -734,7 +734,7 @@ function setupImageDetectionListeners() {
     });
     
     detectSvg.addEventListener('change', async (e) => {
-        const success = await storage.set('ihs_detect_svg', e.target.checked);
+        const success = await storage.set('ih_detect_svg', e.target.checked);
         if (success) {
             showStatus(e.target.checked ? i18n.t('statusSvgDetOn') : i18n.t('statusSvgDetOff'));
             await notifyContentScriptSettingsChanged();
@@ -745,7 +745,7 @@ function setupImageDetectionListeners() {
     });
     
     detectBackground.addEventListener('change', async (e) => {
-        const success = await storage.set('ihs_detect_background', e.target.checked);
+        const success = await storage.set('ih_detect_background', e.target.checked);
         if (success) {
             showStatus(e.target.checked ? i18n.t('statusBgImgDetOn') : i18n.t('statusBgImgDetOff'));
             await notifyContentScriptSettingsChanged();
@@ -756,7 +756,7 @@ function setupImageDetectionListeners() {
     });
     
     detectVideo.addEventListener('change', async (e) => {
-        const success = await storage.set('ihs_detect_video', e.target.checked);
+        const success = await storage.set('ih_detect_video', e.target.checked);
         if (success) {
             showStatus(e.target.checked ? i18n.t('statusVideoDetOn') : i18n.t('statusVideoDetOff'));
             await notifyContentScriptSettingsChanged();
@@ -769,7 +769,7 @@ function setupImageDetectionListeners() {
     // Allowed extensions input
     allowedExtensions.addEventListener('change', async (e) => {
         const value = e.target.value.trim();
-        const success = await storage.set('ihs_allowed_extensions', value);
+        const success = await storage.set('ih_allowed_extensions', value);
         if (success) {
             showStatus(i18n.t('statusExtUpdated'));
         } else {
@@ -781,7 +781,7 @@ function setupImageDetectionListeners() {
     downloadModeRadios.forEach(radio => {
         radio.addEventListener('change', async (e) => {
             if (e.target.checked) {
-                const success = await storage.set('ihs_download_mode', e.target.value);
+                const success = await storage.set('ih_download_mode', e.target.value);
                 if (success) {
                     const msgKey = e.target.value === 'normal' ? 'statusModeNormal' : 'statusModeCanvas';
                     showStatus(i18n.t(msgKey));
@@ -794,7 +794,7 @@ function setupImageDetectionListeners() {
                 } else {
                     showStatus(i18n.t('statusSaveFailed'), 'error');
                     // Revert to previous selection
-                    const currentMode = await storage.get('ihs_download_mode') || 'normal';
+                    const currentMode = await storage.get('ih_download_mode') || 'normal';
                     document.getElementById('downloadMode' + currentMode.charAt(0).toUpperCase() + currentMode.slice(1)).checked = true;
                     updateDownloadModeIndicator(currentMode);
                 }
@@ -806,7 +806,7 @@ function setupImageDetectionListeners() {
     borderHighlightRadios.forEach(radio => {
         radio.addEventListener('change', async (e) => {
             if (e.target.checked) {
-                const success = await storage.set('ihs_border_highlight_mode', e.target.value);
+                const success = await storage.set('ih_border_highlight_mode', e.target.value);
                 if (success) {
                     const msgKey = e.target.value === 'off' ? 'statusBorderOff' :
                                    e.target.value === 'gray' ? 'statusBorderGray' : 'statusBorderGreen';
@@ -815,7 +815,7 @@ function setupImageDetectionListeners() {
                 } else {
                     showStatus(i18n.t('statusBorderSaveFailed'), 'error');
                     // Revert to previous selection
-                    const currentMode = await storage.get('ihs_border_highlight_mode') || 'off';
+                    const currentMode = await storage.get('ih_border_highlight_mode') || 'off';
                     document.getElementById('borderHighlight' + currentMode.charAt(0).toUpperCase() + currentMode.slice(1)).checked = true;
                 }
             }
@@ -827,7 +827,7 @@ function setupImageDetectionListeners() {
     minImageSize.addEventListener('change', async (e) => {
         const value = parseInt(e.target.value);
         if (e.target.validity.valid && value >= 50 && value <= 1000) {
-            const success = await storage.set('ihs_min_image_size', value);
+            const success = await storage.set('ih_min_image_size', value);
             if (success) {
                 showStatus(i18n.tf('statusMinSizeSet', { value }));
                 await notifyContentScriptSettingsChanged();
@@ -843,7 +843,7 @@ function setupImageDetectionListeners() {
     // WebP to PNG conversion checkbox
     const convertWebpToPng = document.getElementById('convertWebpToPng');
     convertWebpToPng.addEventListener('change', async (e) => {
-        const success = await storage.set('ihs_convert_webp_to_png', e.target.checked);
+        const success = await storage.set('ih_convert_webp_to_png', e.target.checked);
         if (success) {
             showStatus(e.target.checked ? i18n.t('statusWebpPngOn') : i18n.t('statusWebpPngOff'));
             await notifyContentScriptSettingsChanged();
@@ -856,7 +856,7 @@ function setupImageDetectionListeners() {
     // Long hide delay checkbox
     const longHideDelay = document.getElementById('longHideDelay');
     longHideDelay.addEventListener('change', async (e) => {
-        const success = await storage.set('ihs_long_hide_delay', e.target.checked);
+        const success = await storage.set('ih_long_hide_delay', e.target.checked);
         if (success) {
             showStatus(e.target.checked ? i18n.t('statusLongHideOn') : i18n.t('statusLongHideOff'));
             await notifyContentScriptSettingsChanged();
@@ -873,7 +873,7 @@ function setupImageDetectionListeners() {
             let rawValue = e.target.value.trim();
             let sanitized = rawValue.replace(/[<>:"\\|?*]/g, '').replace(/^[/\\]+|[/\\]+$/g, '');
             e.target.value = sanitized;
-            const success = await storage.set('ihs_download_subfolder', sanitized);
+            const success = await storage.set('ih_download_subfolder', sanitized);
             if (success) {
                 if (sanitized) {
                     showStatus(i18n.tf('statusSubfolderSet', { value: sanitized }));
@@ -893,7 +893,7 @@ function setupImageDetectionListeners() {
             let rawValue = e.target.value.trim();
             let sanitized = rawValue.replace(/[<>:"\\|?*]/g, '').replace(/^[/\\]+|[/\\]+$/g, '');
             e.target.value = sanitized;
-            const success = await storage.set('ihs_base_subfolder', sanitized);
+            const success = await storage.set('ih_base_subfolder', sanitized);
             if (success) {
                 if (sanitized) {
                     showStatus(`Base dir: Downloads/${sanitized}/`);
@@ -994,14 +994,14 @@ function renderPathList(paths) {
 
 // Add a new empty path entry
 function addPath() {
-    storage.get('ihs_multi_paths').then((paths) => {
+    storage.get('ih_multi_paths').then((paths) => {
         if (!Array.isArray(paths)) paths = [];
         if (paths.length >= MAX_MULTI_PATHS) {
             showStatus(i18n.t('maxPathsWarning'), 'error');
             return;
         }
         paths.push({ name: '', path: '', enabled: true });
-        storage.set('ihs_multi_paths', paths).then(() => {
+        storage.set('ih_multi_paths', paths).then(() => {
             renderPathList(paths);
         });
     });
@@ -1009,10 +1009,10 @@ function addPath() {
 
 // Remove a path at given index
 function removePath(index) {
-    storage.get('ihs_multi_paths').then((paths) => {
+    storage.get('ih_multi_paths').then((paths) => {
         if (!Array.isArray(paths)) return;
         paths.splice(index, 1);
-        storage.set('ihs_multi_paths', paths).then(() => {
+        storage.set('ih_multi_paths', paths).then(() => {
             renderPathList(paths);
             showStatus(i18n.t('statusPathRemoved'));
         });
@@ -1021,14 +1021,14 @@ function removePath(index) {
 
 // Move a path up or down by one position
 function movePath(index, direction) { // direction: -1 = up, +1 = down
-    storage.get('ihs_multi_paths').then((paths) => {
+    storage.get('ih_multi_paths').then((paths) => {
         if (!Array.isArray(paths)) return;
         const newIndex = index + direction;
         if (newIndex < 0 || newIndex >= paths.length) return;
 
         // Swap elements in array
         [paths[index], paths[newIndex]] = [paths[newIndex], paths[index]];
-        storage.set('ihs_multi_paths', paths).then(() => {
+        storage.set('ih_multi_paths', paths).then(() => {
             renderPathList(paths);
         });
     });
@@ -1036,7 +1036,7 @@ function movePath(index, direction) { // direction: -1 = up, +1 = down
 
 // Update a path's fields from input values
 function updatePath(index) {
-    storage.get('ihs_multi_paths').then((paths) => {
+    storage.get('ih_multi_paths').then((paths) => {
         if (!Array.isArray(paths) || !paths[index]) return;
         
         const container = document.getElementById('pathList');
@@ -1070,7 +1070,7 @@ function updatePath(index) {
         // Update input with sanitized value
         if (folderInput) folderInput.value = sanitizedFolder;
         
-        storage.set('ihs_multi_paths', paths).then(() => {
+        storage.set('ih_multi_paths', paths).then(() => {
             showStatus(i18n.tf('statusPathAdded', { name: newName || '(unnamed)', folder: sanitizedFolder }));
             
             // Notify content script of settings change
@@ -1109,11 +1109,11 @@ function updateMultiPathAvailability(downloadMode) {
         }
         // 如果之前配置过多路径，切回 normal 时自动勾选
         if (!multiPathCheckbox.checked) {
-            storage.get('ihs_multi_paths').then(paths => {
+            storage.get('ih_multi_paths').then(paths => {
                 if (Array.isArray(paths) && paths.some(p => p.name && p.path)) {
                     multiPathCheckbox.checked = true;
                     multiPathContainer.style.display = 'block';
-                    storage.set('ihs_multi_path_enabled', true).catch(() => {});
+                    storage.set('ih_multi_path_enabled', true).catch(() => {});
                 }
             });
         }
@@ -1122,7 +1122,7 @@ function updateMultiPathAvailability(downloadMode) {
         // Disable: lock checkbox, hide container, show visual hint
         if (multiPathCheckbox.checked) {
             multiPathCheckbox.checked = false;
-            storage.set('ihs_multi_path_enabled', false).catch(() => {});
+            storage.set('ih_multi_path_enabled', false).catch(() => {});
             multiPathContainer.style.display = 'none';
         }
         multiPathCheckbox.disabled = true;
@@ -1145,7 +1145,7 @@ function setupMultiPathListeners() {
         multiPathCheckbox.addEventListener('change', async (e) => {
             const enabled = e.target.checked;
             multiPathContainer.style.display = enabled ? 'block' : 'none';
-            const success = await storage.set('ihs_multi_path_enabled', enabled);
+            const success = await storage.set('ih_multi_path_enabled', enabled);
             if (success) {
                 showStatus(enabled ? i18n.t('statusMultiPathOn') : i18n.t('statusMultiPathOff'));
                 await notifyContentScriptSettingsChanged();
@@ -1167,15 +1167,15 @@ function setupMultiPathListeners() {
 // Get current settings for image detection
 async function getCurrentSettings() {
     try {
-        const detectImg = await storage.get('ihs_detect_img');
-        const detectSvg = await storage.get('ihs_detect_svg');
-        const detectBackground = await storage.get('ihs_detect_background');
-        const detectVideo = await storage.get('ihs_detect_video');
-        const allowedExtensions = await storage.get('ihs_allowed_extensions');
-        const convertWebpToPng = await storage.get('ihs_convert_webp_to_png');
-        const minImageSize = await storage.get('ihs_min_image_size');
-        const borderHighlightMode = await storage.get('ihs_border_highlight_mode');
-        const longHideDelay = await storage.get('ihs_long_hide_delay');
+        const detectImg = await storage.get('ih_detect_img');
+        const detectSvg = await storage.get('ih_detect_svg');
+        const detectBackground = await storage.get('ih_detect_background');
+        const detectVideo = await storage.get('ih_detect_video');
+        const allowedExtensions = await storage.get('ih_allowed_extensions');
+        const convertWebpToPng = await storage.get('ih_convert_webp_to_png');
+        const minImageSize = await storage.get('ih_min_image_size');
+        const borderHighlightMode = await storage.get('ih_border_highlight_mode');
+        const longHideDelay = await storage.get('ih_long_hide_delay');
         
         return {
             detectImg: detectImg !== false, // Default: true
@@ -1262,11 +1262,11 @@ async function handleGalleryView() {
 
 // Handle ZIP download
 async function handleDownloadZip() {
-    debug.log('[IHS Popup] ZIP download started');
+    debug.log('[IH Popup] ZIP download started');
     
     // First check if JSZip is available
     if (typeof JSZip === 'undefined') {
-        debug.error('[IHS Popup] JSZip not available during download');
+        debug.error('[IH Popup] JSZip not available during download');
         showStatus(i18n.t('statusJszipNotAvailable'), 'error');
         return;
     }
@@ -1275,12 +1275,12 @@ async function handleDownloadZip() {
         showStatus(i18n.t('statusScanning'), 'info');
         
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        debug.log('[IHS Popup] Active tab:', activeTab.url);
+        debug.log('[IH Popup] Active tab:', activeTab.url);
         
         const settings = await getCurrentSettings();
-        debug.log('[IHS Popup] Current settings:', settings);
+        debug.log('[IH Popup] Current settings:', settings);
         
-        debug.log('[IHS Popup] Sending message to content script...');
+        debug.log('[IH Popup] Sending message to content script...');
         
         let response;
         try {
@@ -1289,15 +1289,15 @@ async function handleDownloadZip() {
                 settings: settings
             });
         } catch (messageError) {
-            debug.error('[IHS Popup] Failed to send message to content script:', messageError);
+            debug.error('[IH Popup] Failed to send message to content script:', messageError);
             showStatus(i18n.t('statusContentScriptError'), 'error');
             return;
         }
         
-        debug.log('[IHS Popup] Response from content script:', response);
+        debug.log('[IH Popup] Response from content script:', response);
         
         if (!response) {
-            debug.error('[IHS Popup] No response from content script');
+            debug.error('[IH Popup] No response from content script');
             showStatus(i18n.t('statusContentScriptNoResponse'), 'error');
             return;
         }
@@ -1371,10 +1371,10 @@ async function handleDownloadZip() {
         const url = URL.createObjectURL(zipBlob);
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const pageTitle = activeTab.title ? sanitizeFilename(activeTab.title).substring(0, 30) : 'page';
-        const zipFilename = `ihs_images_${pageTitle}_${timestamp}.zip`;
+        const zipFilename = `ih_images_${pageTitle}_${timestamp}.zip`;
         
         // Prepend subfolder if configured
-        const subfolder = await storage.get('ihs_download_subfolder');
+        const subfolder = await storage.get('ih_download_subfolder');
         const filename = (subfolder && subfolder.trim())
             ? `${subfolder.trim()}/${zipFilename}`
             : zipFilename;
@@ -1894,7 +1894,7 @@ function createGalleryHtml(images, pageTitle) {
                         
                         const url = URL.createObjectURL(zipBlob);
                         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                        const filename = 'ihs_gallery_images_' + timestamp + '.zip';
+                        const filename = 'ih_gallery_images_' + timestamp + '.zip';
                         
                         const a = document.createElement('a');
                         a.href = url;
@@ -2019,26 +2019,26 @@ function sanitizeFilename(filename) {
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', async () => {
-    diag.log('[IHS Popup] DOMContentLoaded fired');
-    debug.log('[IHS Popup] Initializing...');
+    diag.log('[IH Popup] DOMContentLoaded fired');
+    debug.log('[IH Popup] Initializing...');
     
     try {
         // Check if JSZip is available
         if (typeof JSZip === 'undefined') {
-            debug.error('[IHS Popup] JSZip not loaded');
+            debug.error('[IH Popup] JSZip not loaded');
             showStatus(i18n.t('statusJszipLoadFailed'), 'error');
             return;
         } else {
-            debug.log('[IHS Popup] JSZip loaded successfully, version:', JSZip.version || 'unknown');
+            debug.log('[IH Popup] JSZip loaded successfully, version:', JSZip.version || 'unknown');
             
             // Test JSZip functionality
             try {
                 const testZip = new JSZip();
                 testZip.file('test.txt', 'Hello World');
                 const testBlob = await testZip.generateAsync({ type: 'blob' });
-                debug.log('[IHS Popup] JSZip test successful, blob size:', testBlob.size);
+                debug.log('[IH Popup] JSZip test successful, blob size:', testBlob.size);
             } catch (zipError) {
-                debug.error('[IHS Popup] JSZip test failed:', zipError);
+                debug.error('[IH Popup] JSZip test failed:', zipError);
                 showStatus(i18n.t('statusJszipNotFunctioning'), 'error');
                 return;
             }
@@ -2048,9 +2048,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         await initializePopup();
         setupEventListeners();
         
-        debug.log('[IHS Popup] Initialization complete');
+        debug.log('[IH Popup] Initialization complete');
     } catch (error) {
-        debug.error('[IHS Popup] Initialization failed:', error);
+        debug.error('[IH Popup] Initialization failed:', error);
         showStatus(i18n.t('statusInitFailed'), 'error');
     }
 });
@@ -2080,7 +2080,7 @@ async function notifyContentScriptSettingsChanged() {
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (activeTab && activeTab.id) {
             const settings = await getCurrentSettings();
-            const minImageSize = await storage.get('ihs_min_image_size');
+            const minImageSize = await storage.get('ih_min_image_size');
             
             chrome.tabs.sendMessage(activeTab.id, {
                 type: 'settings_updated',
@@ -2125,13 +2125,13 @@ async function setupCurrentSite() {
 
         // 点击排除/恢复按钮
         excludeBtn.addEventListener('click', async () => {
-            const currentExclusions = (await storage.get('ihs_domain_exclusions')) || [];
+            const currentExclusions = (await storage.get('ih_domain_exclusions')) || [];
             const idx = currentExclusions.indexOf(domain);
             let ok;
             if (idx !== -1) {
                 // 已排除 → 恢复
                 currentExclusions.splice(idx, 1);
-                ok = await storage.set('ihs_domain_exclusions', currentExclusions);
+                ok = await storage.set('ih_domain_exclusions', currentExclusions);
                 if (ok) {
                     excludeBtn.textContent = i18n.t('excludeSiteBtn');
                     excludeBtn.classList.remove('excluded');
@@ -2140,7 +2140,7 @@ async function setupCurrentSite() {
             } else {
                 // 未排除 → 加入排除
                 currentExclusions.push(domain);
-                ok = await storage.set('ihs_domain_exclusions', currentExclusions);
+                ok = await storage.set('ih_domain_exclusions', currentExclusions);
                 if (ok) {
                     markAsExcluded(excludeBtn);
                     showStatus(i18n.t('statusSaved'), 'success');
@@ -2149,7 +2149,7 @@ async function setupCurrentSite() {
         });
 
         // 检查初始状态
-        const exclusions = (await storage.get('ihs_domain_exclusions')) || [];
+        const exclusions = (await storage.get('ih_domain_exclusions')) || [];
         if (exclusions.includes(domain)) {
             markAsExcluded(excludeBtn);
         }

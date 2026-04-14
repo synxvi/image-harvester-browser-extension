@@ -1,6 +1,6 @@
-/* Image Hover Save Extension - Content Styles */
+/* Image Harvester - Content Styles */
 
-.ihs-download-btn {
+.ih-download-btn {
     display: none;
     position: fixed;
     right: 0; /* set by JS dynamically */
@@ -23,18 +23,18 @@
     justify-content: center;
 }
 
-.ihs-download-btn:hover {
+.ih-download-btn:hover {
     background: rgba(0, 0, 0, 0.9);
     transform: scale(1.1);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
-.ihs-download-btn:active {
+.ih-download-btn:active {
     transform: scale(0.95);
 }
 
 /* ===== Multi-Path Download Toolbar ===== */
-.ihs-download-toolbar {
+.ih-download-toolbar {
     display: none;
     position: fixed;
     right: 0; /* set by JS dynamically */
@@ -48,16 +48,16 @@
     -webkit-backdrop-filter: none;
     padding: 0;
     transition: right 0.15s ease, top 0.15s ease;
-    animation: ihs-toolbar-fadeIn 0.15s ease-out;
+    animation: ih-toolbar-fadeIn 0.15s ease-out;
 }
 
-@keyframes ihs-toolbar-fadeIn {
+@keyframes ih-toolbar-fadeIn {
     from { opacity: 0; transform: translateX(4px); }
     to { opacity: 1; transform: translateX(0); }
 }
 
 /* Individual path button inside the toolbar */
-.ihs-toolbar-btn {
+.ih-toolbar-btn {
     display: block;
     white-space: nowrap;
     padding: 5px 10px;
@@ -80,24 +80,24 @@
     text-overflow: ellipsis;
 }
 
-.ihs-toolbar-btn:last-child {
+.ih-toolbar-btn:last-child {
     margin-bottom: 0;
 }
 
-.ihs-toolbar-btn:hover {
+.ih-toolbar-btn:hover {
     background: rgba(102, 126, 234, 0.85);
     border-color: rgba(102, 126, 234, 1);
     transform: scale(1.12);
     box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
-.ihs-toolbar-btn:active {
+.ih-toolbar-btn:active {
     transform: scale(0.95);
     background: rgba(82, 106, 194, 0.95);
 }
 
 /* ===== Download Toast Notifications ===== */
-.ihs-toast-container {
+.ih-toast-container {
     position: fixed;
     top: 12px;
     right: 12px;
@@ -108,7 +108,7 @@
     pointer-events: none;
 }
 
-.ihs-toast {
+.ih-toast {
     display: flex;
     align-items: center;
     gap: 5px;
@@ -120,34 +120,34 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-    animation: ihs-toast-in 0.3s ease-out;
+    animation: ih-toast-in 0.3s ease-out;
     pointer-events: auto;
     max-width: 200px;
     word-break: break-all;
 }
 
-.ihs-toast-start {
+.ih-toast-start {
     background: rgba(102, 126, 234, 0.65);
 }
 
-.ihs-toast-done {
+.ih-toast-done {
     background: rgba(40, 167, 69, 0.65);
 }
 
-.ihs-toast-text {
+.ih-toast-text {
     line-height: 1.2;
 }
 
-.ihs-toast-out {
-    animation: ihs-toast-out 0.3s ease-in forwards;
+.ih-toast-out {
+    animation: ih-toast-out 0.3s ease-in forwards;
 }
 
-@keyframes ihs-toast-in {
+@keyframes ih-toast-in {
     from { opacity: 0; transform: translateX(20px); }
     to { opacity: 1; transform: translateX(0); }
 }
 
-@keyframes ihs-toast-out {
+@keyframes ih-toast-out {
     from { opacity: 1; transform: translateX(0); }
     to { opacity: 0; transform: translateX(20px); }
 }

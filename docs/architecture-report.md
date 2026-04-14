@@ -1,4 +1,4 @@
-# Image Hover Save Chrome Extension — 软件架构报告
+# Image Harvester Chrome Extension — 软件架构报告
 
 > **版本**: 1.5.0 | **Manifest**: V3 (Service Worker) | **许可证**: zlib-acknowledgement  
 > **作者**: Jaewoo Jeon (@thejjw) | **生成日期**: 2026-04-08
@@ -9,7 +9,7 @@
 
 | 属性 | 值 |
 |------|-----|
-| 项目名称 | Image Hover Save |
+| 项目名称 | Image Harvester |
 | 类型 | Chrome 浏览器扩展 (Extension) |
 | Manifest 版本 | **V3**（Service Worker 架构） |
 | 构建工具 | **无（零构建依赖，纯原生开发）** |
@@ -114,7 +114,7 @@ image-hover-save-chrome-extension/
 |----------|----------|
 | **生命周期管理** | `onInstalled`: 初始化默认设置、创建右键菜单(3项)、清理旧 DNR 规则；`onStartup`: 设置所有标签 badge 状态、清理会话级规则 |
 | **下载引擎（6种方式）** | `downloadImage()` 标准下载；`downloadCanvasImage()` Canvas 提取下载；`downloadLinkDirectly()` 链接下载；`downloadVideoDirectly()` 视频下载；`downloadImageDirectly()` 图片下载 |
-| **消息路由中心（7种）** | `download_image` → downloadImage；`download_canvas_image` → downloadCanvasImage；`check_webp_animated` → WebP 动画检测(异步)；`fetch_webp_for_conversion` → 图片转 dataURL(异步)；`ihs:domain_status_changed` → 更新 badge；`ihs:request_referer_rule` → 添加 Referer 欺骗规则 |
+| **消息路由中心（7种）** | `download_image` → downloadImage；`download_canvas_image` → downloadCanvasImage；`check_webp_animated` → WebP 动画检测(异步)；`fetch_webp_for_conversion` → 图片转 dataURL(异步)；`ih:domain_status_changed` → 更新 badge；`ih:request_referer_rule` → 添加 Referer 欺骗规则 |
 | **Referer 欺骗系统** | 使用 `declarativeNetRequest.updateDynamicRules()` 动态添加规则，修改请求头(referer/origin) 和响应头(CORS)，按 hostname 去重避免重复 |
 | **WebP 动画检测** | 只获取前 1KB header (`Range: bytes=0-1024`)，解析 RIFF 容器格式检查 VP8X/ANIM/ANMF chunk |
 | **工具函数** | `generateCleanFilename()` URL 解析清洗+长度限制 100 字符；`getImageFromCache()` 浏览器缓存读取；`fetchImageAsDataUrl()` 图片转 dataURL；`updateBadge()` Badge 状态管理 |
@@ -131,7 +131,7 @@ image-hover-save-chrome-extension/
 | **四种下载模式（渐进降级）** | ① WebP→PNG 转换 → ② Canvas 提取(drawImage+toBlob) → ③ Fetch 缓存模式 → ④ Normal 后台 API 下载 |
 | **WebP→PNG 转换管线** | 检测 WebP → 发送 check_webp_animated 到 background → 解析 VP8X/ANIM/ANMF → 若静态则 fetch_webp_for_conversion → canvas 绘制 → toBlob(PNG) → blob 本地下载 |
 | **图片扫描引擎** | 供 popup 批量使用，扫描 IMG/SVG/背景图/VIDEO 四类媒体，按扩展名/尺寸过滤，URL 去重，返回结构化数组 `{url, type, alt, width, height}` |
-| **域名排除系统** | 精确匹配 + 子域名后缀匹配，存储键 `ihs_domain_exclusions`，排除时 badge 显示 "EXCL" |
+| **域名排除系统** | 精确匹配 + 子域名后缀匹配，存储键 `ih_domain_exclusions`，排除时 badge 显示 "EXCL" |
 | **边框高亮视觉反馈** | 三种模式：off / gray(#888) / green(#00ff00)，动态 CSS 注入 |
 | **Referer 欺骗请求** | mouseenter 时自动向 background 请求添加 DNR 规则（仅跨源非 data URL） |
 | **视频特殊处理** | 自动移除 video 的 `controlslist` 中的 `nodownload` 属性 |
@@ -144,7 +144,7 @@ image-hover-save-chrome-extension/
 |----------|----------|
 | **14 项可配置参数** | 总开关、悬停延迟、IMG/VIDEO/SVG/背景图检测开关、下载模式(normal/canvas/cache)、边框高亮模式、允许的扩展名列表、最小图片尺寸、WebP→PNG 转换、长隐藏延迟、域名排除列表 |
 | **Gallery 图库视图** | 向 content script 发消息扫描图片 → 新标签打开完整 HTML 页面(data URL) → 内联过滤系统（尺寸/扩展名多选）→ CSS Grid 自适应布局 → 内嵌 ZIP 下载 |
-| **ZIP 批量下载** | 使用 JSZip 创建 zip 归档 → 逐张 fetch 图片添加到 `images/` 文件夹 → 实时进度显示 → `chrome.downloads.download` 保存 → 文件名格式 `ihs_images_{pageTitle}_{timestamp}.zip` |
+| **ZIP 批量下载** | 使用 JSZip 创建 zip 归档 → 逐张 fetch 图片添加到 `images/` 文件夹 → 实时进度显示 → `chrome.downloads.download` 保存 → 文件名格式 `ih_images_{pageTitle}_{timestamp}.zip` |
 | **设置变更通知** | 修改任何设置后调用 `notifyContentScriptSettingsChanged()` 向当前活动标签发送 `settings_updated` 消息 |
 | **重置功能** | 清空 `chrome.storage.sync` → 重新加载默认值 → 通知 content script 重置 |
 
@@ -253,7 +253,7 @@ const debug = {
 
 ```powershell
 # Windows PowerShell
-Compress-Archive -Path "extension\*" -DestinationPath "image-hover-save-v1.5.0.zip"
+Compress-Archive -Path "extension\*" -DestinationPath "image-harvester-v1.5.0.zip"
 
 # 或使用 ZIP 工具手动选择 extension/ 目录下所有文件打包
 ```
@@ -365,7 +365,7 @@ content.js: mouseenter 事件 (捕获阶段)
        │
        ├─ 检查：启用状态？域名排除？元素类型？最小尺寸？
        │
-       ├─ 跨域时 → background.js: ihs:request_referer_rule
+       ├─ 跨域时 → background.js: ih:request_referer_rule
        │              └── declarativeNetRequest 添加规则
        │
        ▼
@@ -411,7 +411,7 @@ content.js: getAllImages() → 返回 images[] 数组
                      → zip.folder('images').file(name, blob)
                      → zip.generateAsync({ type: 'blob' })
                      → chrome.downloads.download({ url: blobURL })
-                     → 文件名: ihs_images_{title}_{timestamp}.zip
+                     → 文件名: ih_images_{title}_{timestamp}.zip
 ```
 
 ---
@@ -456,19 +456,19 @@ WebP→PNG 转换  →  Canvas 提取  →  Fetch 缓存  →  Background API
 
 | 键名 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `ihs_enabled` | boolean | true | 总开关 |
-| `ihs_hover_delay` | number(ms) | 1500 | 悬停延迟 (500~3000) |
-| `ihs_detect_img` | boolean | true | 检测 `<img>` 标签 |
-| `ihs_detect_video` | boolean | true | 检测 `<video>` 标签 |
-| `ihs_detect_svg` | boolean | false | 检测 `<svg>` 标签（高级） |
-| `ihs_detect_background` | boolean | false | 检测 CSS 背景图（高级） |
-| `ihs_download_mode` | string | 'normal' | normal / canvas / cache |
-| `ihs_border_highlight_mode` | string | 'off' | off / gray / green |
-| `ihs_allowed_extensions` | string | 默认列表 | 逗号分隔的允许扩展名 |
-| `ihs_min_image_size` | number(px) | 100 | 最小宽高 (50~1000) |
-| `ihs_convert_webp_to_png` | boolean | false | WebP 转 PNG |
-| `ihs_long_hide_delay` | boolean | false | 长隐藏延迟 (1.5s vs 100ms) |
-| `ihs_domain_exclusions` | array | [] | 排除域名列表 |
+| `ih_enabled` | boolean | true | 总开关 |
+| `ih_hover_delay` | number(ms) | 1500 | 悬停延迟 (500~3000) |
+| `ih_detect_img` | boolean | true | 检测 `<img>` 标签 |
+| `ih_detect_video` | boolean | true | 检测 `<video>` 标签 |
+| `ih_detect_svg` | boolean | false | 检测 `<svg>` 标签（高级） |
+| `ih_detect_background` | boolean | false | 检测 CSS 背景图（高级） |
+| `ih_download_mode` | string | 'normal' | normal / canvas / cache |
+| `ih_border_highlight_mode` | string | 'off' | off / gray / green |
+| `ih_allowed_extensions` | string | 默认列表 | 逗号分隔的允许扩展名 |
+| `ih_min_image_size` | number(px) | 100 | 最小宽高 (50~1000) |
+| `ih_convert_webp_to_png` | boolean | false | WebP 转 PNG |
+| `ih_long_hide_delay` | boolean | false | 长隐藏延迟 (1.5s vs 100ms) |
+| `ih_domain_exclusions` | array | [] | 排除域名列表 |
 
 ---
 
