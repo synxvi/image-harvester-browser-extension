@@ -77,13 +77,11 @@ const i18n = {
             videoElements: 'Video elements',
             downloadModeLabel: 'Current download mode:',
             modeNormal: 'Normal (background)',
-            modeCacheExperimental: 'Cache-based (Experimental)',
             modeCanvasExperimental: 'Canvas extraction (Experimental)',
             advancedSettings: '\u2699\uFE0F Advanced',
             experimentalHelp: 'Experimental modes for more restrictive sites. YMMV.',
             experimentalModes: '\uD83E\uDDEA Experimental download modes:',
             normalDownload: 'Normal background download',
-            fetchBasedDownload: 'Try fetch-based downloads',
             canvasExtraction: 'Try canvas extraction',
             advancedDetection: 'Advanced detection types:',
             svgElements: 'SVG elements',
@@ -137,7 +135,6 @@ const i18n = {
             statusExtUpdated: 'File extensions updated',
             statusExtSaveFailed: 'Failed to save extensions',
             statusModeNormal: 'Download mode set to: Normal',
-            statusModeCache: 'Download mode set to: Cache-based',
             statusModeCanvas: 'Download mode set to: Canvas extraction',
             statusBorderOff: 'Border highlighting disabled',
             statusBorderGray: 'Border highlighting enabled (gray)',
@@ -229,13 +226,11 @@ const i18n = {
             videoElements: '\u89C6\u9891\u5143\u7D20',
             downloadModeLabel: '\u5F53\u524D\u4E0B\u8F7D\u6A21\u5F0F\uFF1A',
             modeNormal: '\u666E\u901A\u540E\u53F0\u4E0B\u8F7D',
-            modeCacheExperimental: '\u57FA\u4E8E\u7F13\u5B58\uFF08\u5B9E\u9A8C\u6027\uFF09',
             modeCanvasExperimental: 'Canvas \u63D0\u53D6\uFF08\u5B9E\u9A8C\u6027\uFF09',
             advancedSettings: '\u2699\uFE0F \u9AD8\u7EA7\u8BBE\u7F6E',
             experimentalHelp: '\u5BF9\u9650\u5236\u6027\u66F4\u5F3A\u7684\u7AD9\u70B9\u7684\u5B9E\u9A8C\u6A21\u5F0F\uFF0C\u6548\u679C\u56E0\u7AD9\u800C\u5F02\u3002',
             experimentalModes: '\uD83E\uDDEA \u5B9E\u9A8C\u6027\u4E0B\u8F7D\u6A21\u5F0F\uFF1A',
             normalDownload: '\u666E\u901A\u540E\u53F0\u4E0B\u8F7D',
-            fetchBasedDownload: '\u5C1D\u8BD5\u57FA\u4E8E Fetch \u7684\u4E0B\u8F7D',
             canvasExtraction: '\u5C1D\u8BD5 Canvas \u63D0\u53D6',
             advancedDetection: '\u9AD8\u7EA7\u68C0\u6D4B\u7C7B\u578B\uFF1A',
             svgElements: 'SVG \u5143\u7D20',
@@ -289,7 +284,6 @@ const i18n = {
             statusExtUpdated: '\u6587\u4EF6\u6269\u5C55\u540D\u5DF2\u66F4\u65B0',
             statusExtSaveFailed: '\u4FDD\u5B58\u6269\u5C55\u540D\u5931\u8D25',
             statusModeNormal: '\u4E0B\u8F7D\u6A21\u5F0F\u5DF2\u8BBE\u7F6E\u4E3A\uFF1A\u666E\u901A',
-            statusModeCache: '\u4E0B\u8F7D\u6A21\u5F0F\u5DF2\u8BBE\u7F6E\u4E3A\uFF1A\u57FA\u4E8E\u7F13\u5B58',
             statusModeCanvas: '\u4E0B\u8F7D\u6A21\u5F0F\u5DF2\u8BBE\u7F6E\u4E3A\uFF1ACanvas \u63D0\u53D6',
             statusBorderOff: '\u8FB9\u6846\u9AD8\u4EAE\u5DF2\u7981\u7528',
             statusBorderGray: '\u8FB9\u6846\u9AD8\u4EAE\u5DF2\u542F\u7528\uFF08\u7070\u8272\uFF09',
@@ -634,9 +628,7 @@ function updateDownloadModeIndicator(mode) {
     
     if (labelSpan) labelSpan.textContent = i18n.t('downloadModeLabel');
     if (modeStrong) {
-        modeStrong.textContent = mode === 'normal' ? i18n.t('modeNormal') : 
-                       mode === 'cache' ? i18n.t('modeCacheExperimental') : 
-                       i18n.t('modeCanvasExperimental');
+        modeStrong.textContent = mode === 'normal' ? i18n.t('modeNormal') : i18n.t('modeCanvasExperimental');
     }
     
     // Update styling based on mode
@@ -791,8 +783,7 @@ function setupImageDetectionListeners() {
             if (e.target.checked) {
                 const success = await storage.set('ihs_download_mode', e.target.value);
                 if (success) {
-                    const msgKey = e.target.value === 'normal' ? 'statusModeNormal' :
-                                   e.target.value === 'cache' ? 'statusModeCache' : 'statusModeCanvas';
+                    const msgKey = e.target.value === 'normal' ? 'statusModeNormal' : 'statusModeCanvas';
                     showStatus(i18n.t(msgKey));
 
                     // Update the indicator

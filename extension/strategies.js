@@ -16,6 +16,24 @@ const debug = {
 // 内置预设策略
 const PRESET_STRATEGIES = [
     {
+        id: 'wallhaven-original',
+        name: 'Wallhaven 原图',
+        domainPattern: 'th.wallhaven.cc',
+        enabled: false,
+        isPreset: true,
+        experimental: true,
+        resolver: 'wallhaven'
+    },
+    {
+        id: 'pixiv-original',
+        name: 'Pixiv 原图',
+        domainPattern: 'pximg.net',
+        enabled: false,
+        isPreset: true,
+        experimental: true,
+        resolver: 'pixiv'
+    },
+    {
         id: 'twitter-x-orig',
         name: 'Twitter/X 原图',
         domainPattern: 'twimg.com',
@@ -83,15 +101,6 @@ const PRESET_STRATEGIES = [
                 replace: '$1'
             }
         ]
-    },
-    {
-        id: 'wallhaven-original',
-        name: 'Wallhaven 原图',
-        domainPattern: 'th.wallhaven.cc',
-        enabled: false,
-        isPreset: true,
-        experimental: true,
-        resolver: 'wallhaven'
     }
 ];
 
@@ -296,10 +305,14 @@ class UrlStrategies {
         const rulesSection = hasRules ? `<div class="strategy-rules">${rulesHtml}</div>` : '';
 
         // 实验性功能说明文案
+        const experimentalNotes = {
+            wallhaven: '启用后，在 Wallhaven 搜索页悬停缩略图时，扩展会穿透页面叠加层检测被遮挡的图片元素，并根据页面中的格式标识（PNG/JPG）自动选择对应的原图 URL。无匹配策略的网站不受影响。',
+            pixiv: '启用后，在 Pixiv 页面悬停缩略图时，扩展会通过 Pixiv API 查询原图的真实格式（PNG/JPG）并下载原图。需要登录 Pixiv 并在 Pixiv 页面上使用。结果会缓存 10 分钟以减少 API 请求。'
+        };
         const experimentalNote = strategy.experimental
             ? `<div class="experimental-note">
                 <span class="experimental-badge">实验性</span>
-                <span>启用后，在 Wallhaven 搜索页悬停缩略图时，扩展会穿透页面叠加层检测被遮挡的图片元素，并根据页面中的格式标识（PNG/JPG）自动选择对应的原图 URL。无匹配策略的网站不受影响。</span>
+                <span>${experimentalNotes[strategy.resolver] || '实验性功能，启用后将尝试获取原图 URL。'}</span>
               </div>`
             : '';
 

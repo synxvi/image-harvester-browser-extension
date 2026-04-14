@@ -61,6 +61,24 @@ let activeStrategy = null;
 // 内置预设策略定义（与 strategies.js 中的 PRESET_STRATEGIES 保持同步）
 const BUILTIN_PRESET_STRATEGIES = [
     {
+        id: 'wallhaven-original',
+        name: 'Wallhaven 原图',
+        domainPattern: 'th.wallhaven.cc',
+        enabled: true,
+        isPreset: true,
+        experimental: true,
+        resolver: 'wallhaven'
+    },
+    {
+        id: 'pixiv-original',
+        name: 'Pixiv 原图',
+        domainPattern: 'pximg.net',
+        enabled: false,
+        isPreset: true,
+        experimental: true,
+        resolver: 'pixiv'
+    },
+    {
         id: 'twitter-x-orig',
         name: 'Twitter/X 原图',
         domainPattern: 'twimg.com',
@@ -110,15 +128,6 @@ const BUILTIN_PRESET_STRATEGIES = [
         rules: [
             { match: '^(https?://[^/]+/v/[^?]+)\\??.*$', replace: '$1' }
         ]
-    },
-    {
-        id: 'wallhaven-original',
-        name: 'Wallhaven 原图',
-        domainPattern: 'th.wallhaven.cc',
-        enabled: true,
-        isPreset: true,
-        experimental: true,
-        resolver: 'wallhaven'
     }
 ];
 
@@ -246,6 +255,10 @@ function transformUrl(url, strategy) {
     return { url, transformed: false, ruleName: null };
 }
 
+// Pixiv 原图 API 缓存（illustId -> { urls, timestamp }）
+const pixivApiCache = new Map();
+const PIXIV_CACHE_TTL = 10 * 60 * 1000; // 10 分钟
+
 // 实验性策略的专属 resolver（从页面 DOM 元数据直接构造原图 URL）
 const strategyResolvers = {
     wallhaven(element) {
@@ -262,6 +275,71 @@ const strategyResolvers = {
         const originalUrl = `https://w.wallhaven.cc/full/${prefix}/wallhaven-${wallpaperId}.${ext}`;
         debug.log('Wallhaven resolver:', wallpaperId, ext, '->', originalUrl);
         return originalUrl;
+    },
+
+    async pixiv(element) {
+        // 从元素 src 提取 illust ID 和页码
+        const src = element.src || element.getAttribute('src');
+        if (!src) return null;
+
+        // 匹配 pximg.net 的各种缩略图 URL 格式，提取 illust ID 和页码
+        const urlMatch = src.match(/\/(\d+)_p(\d+)/);
+        if (!urlMatch) return null;
+        const illustId = urlMatch[1];
+        const page = urlMatch[2];
+
+        // 检查缓存
+        const cached = pixivApiCache.get(illustId);
+        if (cached && Date.now() - cached.timestamp < PIXIV_CACHE_TTL) {
+            const originalUrl = cached.urls[page];
+            if (originalUrl) {
+                debug.log('Pixiv resolver (缓存):', illustId, 'p' + page, '->', originalUrl);
+                return originalUrl;
+            }
+        }
+
+        // 请求 Pixiv API 获取原图 URL
+        try {
+            const response = await fetch(`https://www.pixiv.net/ajax/illust/${illustId}`, {
+                credentials: 'same-origin'
+            });
+            if (!response.ok) {
+                debug.warn('Pixiv API 请求失败:', response.status);
+                return null;
+            }
+            const data = await response.json();
+            if (!data.body || !data.body.urls || !data.body.urls.original) {
+                debug.warn('Pixiv API 返回数据缺少原图 URL');
+                return null;
+            }
+
+            // API 返回的 original 模板包含 {p} 占位符或实际 URL
+            // urls.original 可能是 "https://i.pximg.net/img-original/img/.../{id}_p0.png" 格式
+            // 需要构造所有页面的 URL 映射
+            const originalBase = data.body.urls.original;
+            const pageCount = data.body.pageCount || 1;
+
+            // 构造各页面的原图 URL
+            const urls = {};
+            for (let i = 0; i < pageCount; i++) {
+                // 从第 0 页的 URL 推导其余页面
+                if (i === 0) {
+                    urls[i] = originalBase;
+                } else {
+                    urls[i] = originalBase.replace(/_p0\./, `_p${i}.`);
+                }
+            }
+
+            // 写入缓存
+            pixivApiCache.set(illustId, { urls, timestamp: Date.now() });
+
+            const result = urls[page];
+            debug.log('Pixiv resolver (API):', illustId, 'p' + page, '->', result);
+            return result || null;
+        } catch (e) {
+            debug.warn('Pixiv resolver 请求异常:', e);
+            return null;
+        }
     }
 };
 
@@ -618,7 +696,7 @@ async function downloadElement(element, pathIndex = -1) {
             if (strategy) {
                 if (strategy.resolver && strategyResolvers[strategy.resolver]) {
                     // 实验性策略：使用专属 resolver 从 DOM 元数据构造 URL
-                    const resolved = strategyResolvers[strategy.resolver](element);
+                    const resolved = await strategyResolvers[strategy.resolver](element);
                     if (resolved) {
                         debug.log('Resolver 构造 URL:', strategy.resolver, '->', resolved);
                         elementUrl = resolved;
@@ -783,31 +861,6 @@ async function downloadElement(element, pathIndex = -1) {
                 }
             }
 
-            // Handle new Fetch/Cache mode
-            if (downloadMode === 'cache') {
-                if (activeButton && activeButton.parentNode) {
-                    activeButton.innerHTML = '⏳';
-                    activeButton.title = 'Downloading...';
-                }
-
-                try {
-                    const response = await fetch(elementUrl);
-                    if (response.ok) {
-                        const blob = await response.blob();
-                        downloadBlob(blob, filename);
-                        return;
-                    } else {
-                        debug.warn('Fetch failed with status:', response.status);
-                    }
-                } catch (e) {
-                    debug.warn('Fetch failed, falling back to background', e);
-                }
-
-                if (activeButton && activeButton.parentNode) {
-                    activeButton.innerHTML = activeButtonHtml;
-                }
-            }
-            
             // Final fallback: Normal background download
             chrome.runtime.sendMessage({
                 type: 'download_image',
