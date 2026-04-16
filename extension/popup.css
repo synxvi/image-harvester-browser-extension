@@ -5,7 +5,7 @@ body {
     font-size: 13px;
     margin: 0;
     padding: 0;
-    width: 320px;
+    width: 360px;
     background: #f8f9fa;
     color: #333;
     line-height: 1.4;
@@ -14,8 +14,8 @@ body {
 .container {
     background: white;
     border-radius: 8px;
-    margin: 8px;
-    max-height: 550px;
+    margin: 6px;
+    max-height: 520px;
     overflow-y: auto;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     /* Slim custom scrollbar */
@@ -103,15 +103,146 @@ header p {
 }
 
 main {
-    padding: 16px;
+    padding: 12px 0;
 }
 
 .setting-group {
-    margin-bottom: 20px;
+    background: white;
+    border: 1px solid #e2e6ee;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+    transition: border-color 0.2s;
+}
+
+.setting-group:hover {
+    border-color: #b0b8cc;
 }
 
 .setting-group:last-child {
     margin-bottom: 0;
+}
+
+/* ===== Enable Extension - Toggle Switch ===== */
+.enable-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.enable-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+}
+
+.setting-group .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 42px;
+    height: 24px;
+    flex-shrink: 0;
+    margin-bottom: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #ccc;
+    border-radius: 24px;
+    transition: background 0.25s ease;
+}
+
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.25s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: #0ba5c9;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(18px);
+}
+
+/* ===== Media Detection - Chip Tags ===== */
+.detection-section {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #edf0f5;
+}
+
+.detection-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: #8896a7;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.detection-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.hidden-container {
+    display: none;
+}
+
+.chip {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.chip input {
+    display: none;
+}
+
+.chip span {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1.5px solid #d5d9e8;
+    background: #f8f9fc;
+    color: #6b7280;
+    transition: all 0.2s ease;
+}
+
+.chip:hover span {
+    border-color: #0ba5c9;
+    color: #555;
+}
+
+.chip input:checked + span {
+    background: #e0f4f9;
+    border-color: #0ba5c9;
+    color: #0991ab;
 }
 
 /* ===== Unified Checkbox Style ===== */
@@ -160,44 +291,58 @@ main {
 }
 
 /* Section Labels */
-.setting-group label {
+.setting-group label:not(.position-option):not(.chip):not(.radio-label):not(.checkbox-label) {
     display: block;
     margin-bottom: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    color: #555;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
 }
 
-.delay-controls {
+/* ===== Interaction Settings Section ===== */
+
+.interaction-control {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
+    margin-bottom: 8px;
 }
 
-#hoverDelay {
+.interaction-control:last-child {
+    margin-bottom: 0;
+}
+
+.interaction-label {
+    font-size: 12px;
+    color: #555;
+    width: 65px;
+    flex-shrink: 0;
+    line-height: 24px;
+}
+
+.interaction-control input[type="range"] {
     flex: 1;
     -webkit-appearance: none;
     appearance: none;
-    height: 6px;
+    height: 5px;
     background: #e0e0e0;
     border-radius: 3px;
     outline: none;
 }
 
-#hoverDelay::-webkit-slider-thumb {
+.interaction-control input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
+    width: 14px;
+    height: 14px;
     background: #0ba5c9;
     border-radius: 50%;
     cursor: pointer;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-#hoverDelay::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
+.interaction-control input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
     background: #0ba5c9;
     border-radius: 50%;
     cursor: pointer;
@@ -205,17 +350,73 @@ main {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-#delayValue {
+.interaction-value {
+    font-size: 12px;
     font-weight: 600;
     color: #0ba5c9;
-    min-width: 40px;
-    text-align: center;
+    min-width: 36px;
+    text-align: left;
+}
+
+/* 按钮位置选项行 */
+.interaction-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.interaction-row .interaction-label {
+    line-height: 18px;
+    padding: 2px 0;
+    border: 1px solid transparent;
+}
+
+.position-options {
+    display: flex;
+    gap: 6px;
+}
+
+.position-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    padding: 2px 8px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 18px;
+    color: #555;
+    transition: all 0.15s ease;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.position-option:hover {
+    border-color: #0ba5c9;
+    color: #333;
+}
+
+.position-option input[type="radio"] {
+    display: none;
+}
+
+.position-option:has(input:checked) {
+    background: #e8f6fa;
+    border-color: #0ba5c9;
+    color: #0ba5c9;
+}
+
+.position-icon {
+    font-size: 14px;
+    line-height: 1;
 }
 
 .help-text {
     margin: 6px 0 0 0;
     font-size: 11px;
-    color: #666;
+    color: #8896a7;
     line-height: 1.4;
 }
 
@@ -325,7 +526,7 @@ input[type="text"] {
     width: 100%;
     padding: 8px 12px;
     border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 13px;
     box-sizing: border-box;
 }
@@ -341,7 +542,7 @@ input[type="number"] {
     width: 100%;
     padding: 8px 12px;
     border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 13px;
     box-sizing: border-box;
 }
@@ -386,6 +587,19 @@ input[type="number"]:focus {
     line-height: 1.3;
 }
 
+/* 颜色选择器（内联于 radio-label 中） */
+.border-color-picker {
+    width: 28px;
+    height: 22px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 0;
+    cursor: pointer;
+    vertical-align: middle;
+    margin-left: 6px;
+    flex-shrink: 0;
+}
+
 /* Reset button (standalone usage) */
 .reset-btn {
     width: 100%;
@@ -410,47 +624,23 @@ input[type="number"]:focus {
 }
 
 /* Checkbox Group - inline layout */
-.checkbox-group-inline {
-    display: flex;
-    gap: 12px;
+.detection-options {
+    margin-top: 8px;
 }
 
-.checkbox-group-inline .checkbox-label {
-    flex: 0 0 auto;
-}
-
-
-/* Download Mode Collapsible Interface */
-.download-mode-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.download-mode-indicator {
-    font-size: 13px;
-    color: #333;
-}
-
-.download-mode-indicator strong {
-    color: #0ba5c9;
-}
-
-.download-mode-indicator.experimental strong {
-    color: #ff6b35;
-}
 
 details summary {
-    background: #f5f5f5;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 10px 12px;
-    font-size: 13px;
-    font-weight: 500;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: color 0.2s ease;
     list-style: none;
+    -webkit-user-select: none;
     user-select: none;
     position: relative;
     display: flex;
@@ -461,7 +651,7 @@ details summary {
 details summary::after {
     content: '▶';
     font-size: 10px;
-    color: #888;
+    color: #8896a7;
     transition: transform 0.3s ease;
 }
 
@@ -469,34 +659,26 @@ details summary::-webkit-details-marker {
     display: none;
 }
 
-details summary::-webkit-details-marker {
-    display: none;
+details summary:hover {
+    color: #0ba5c9;
 }
 
-details summary:hover {
-    background: #e8e8e8;
-    border-color: #ccc;
+details summary:hover::after {
+    color: #0ba5c9;
 }
 
 details[open] summary {
-    background: #0ba5c9;
-    color: white;
-    border-color: #0ba5c9;
-    border-radius: 8px 8px 0 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #edf0f5;
+    margin-bottom: 10px;
 }
 
 details[open] summary::after {
     transform: rotate(90deg);
-    color: white;
 }
 
 /* ===== Advanced Settings Panel ===== */
 .adv-settings-panel {
-    background: linear-gradient(135deg, #f8f9ff 0%, #f0f2f8 100%);
-    border: 1px solid #d5d9e8;
-    border-top: none;
-    border-radius: 0 0 8px 8px;
-    padding: 10px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -529,7 +711,7 @@ details[open] summary::after {
 }
 
 .adv-card-desc {
-    margin: 5px 0 0 0;
+    margin: 6px 0 0 0;
     font-size: 11px;
     color: #8896a7;
     line-height: 1.4;
@@ -562,7 +744,7 @@ details[open] summary::after {
     width: 100%;
     padding: 8px 12px;
     border: none;
-    border-radius: 5px;
+    border-radius: 6px;
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -594,18 +776,8 @@ details[open] summary::after {
 }
 
 /* ===== Current Site Section ===== */
-.current-site-section {
-    background: linear-gradient(135deg, #f8f4ff 0%, #f3ecff 100%);
-    border: 1px solid #cdb8e8;
-    border-radius: 8px;
-    padding: 10px 12px;
-    margin-bottom: 14px;
-}
 
 .current-site-section label {
-    display: block;
-    font-weight: 600;
-    color: #6b3fa0;
     margin-bottom: 6px;
 }
 
@@ -620,9 +792,9 @@ details[open] summary::after {
     min-width: 0;
     font-size: 13px;
     color: #4a3570;
-    background: white;
+    background: #f8f5fc;
     border: 1px solid #d5c8e8;
-    border-radius: 5px;
+    border-radius: 6px;
     padding: 5px 10px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -633,7 +805,7 @@ details[open] summary::after {
     flex-shrink: 0;
     padding: 5px 14px;
     border: none;
-    border-radius: 5px;
+    border-radius: 6px;
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -656,18 +828,8 @@ details[open] summary::after {
 }
 
 /* ===== Base Subfolder Section ===== */
-.base-subfolder-section {
-    background: linear-gradient(135deg, #fff8e1 0%, #fff3cd 100%);
-    border: 1px solid #e0c97a;
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 14px;
-}
 
 .base-subfolder-section label:first-child {
-    display: block;
-    font-weight: 600;
-    color: #8a6d0a;
     margin-bottom: 6px;
 }
 
@@ -676,9 +838,9 @@ details[open] summary::after {
     box-sizing: border-box;
     padding: 7px 10px;
     border: 1px solid #d4b85a;
-    border-radius: 5px;
+    border-radius: 6px;
     font-size: 13px;
-    background: white;
+    background: #fffdf5;
     outline: none;
     transition: border-color 0.2s;
 }
@@ -690,23 +852,12 @@ details[open] summary::after {
 
 .base-subfolder-section .help-text {
     color: #927a20;
-    margin: 5px 0 0 0;
+    margin: 6px 0 0 0;
 }
 
 /* ===== Multi-Path Save Section ===== */
 .multi-path-section {
-    background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
-    border: 1px solid #c5cae9;
-    border-radius: 8px;
-    margin-bottom: 16px;
     overflow: hidden;
-}
-
-.multi-path-section .simple-checkbox {
-    font-weight: 500;
-    color: #3949ab;
-    padding: 10px 12px;
-    margin: 0;
 }
 
 .multi-path-section .help-text {
@@ -715,7 +866,9 @@ details[open] summary::after {
 }
 
 #multiPathContainer {
-    padding: 0 12px 12px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #edf0f5;
 }
 
 #pathList {

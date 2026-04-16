@@ -22,32 +22,62 @@
         </header>
 
         <main>
+            <!-- 启用扩展 + 媒体检测 -->
             <div class="setting-group">
-                <label class="simple-checkbox">
-                    <input type="checkbox" id="enabledToggle" checked>
-                    <span data-i18n="enableExtension">Enable extension</span>
-                </label>
-            </div>
-
-            <div class="setting-group">
-                <label for="hoverDelay" data-i18n="hoverDelay">Icon appear delay:</label>
-                <div class="delay-controls">
-                    <input type="range" id="hoverDelay" min="500" max="3000" step="100" value="1000">
-                    <span id="delayValue">1.5s</span>
+                <div class="enable-row">
+                    <span class="enable-label" data-i18n="enableExtension">Enable extension</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="enabledToggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="detection-section">
+                    <div class="detection-title" data-i18n="mediaDetection">Media detection</div>
+                    <div class="detection-chips">
+                        <label class="chip">
+                            <input type="checkbox" id="detectImg" checked>
+                            <span data-i18n="imgTags">IMG tags</span>
+                        </label>
+                        <label class="chip">
+                            <input type="checkbox" id="detectVideo" checked>
+                            <span data-i18n="videoElements">Video elements</span>
+                        </label>
+                    </div>
                 </div>
             </div>
 
-            <div class="setting-group">
-                <label data-i18n="basicDetection">Basic media detection:</label>
-                <div class="checkbox-group checkbox-group-inline">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="detectImg" checked>
-                        <span data-i18n="imgTags">IMG tags</span>
-                    </label>
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="detectVideo" checked>
-                        <span data-i18n="videoElements">Video elements</span>
-                    </label>
+            <!-- 交互设置：按钮位置 + 按钮大小 + 按钮间距 + 悬停延迟 -->
+            <div class="setting-group interaction-section">
+                <label data-i18n="interactionSettings">Interaction Settings:</label>
+                <div class="interaction-row">
+                    <span class="interaction-label" data-i18n="buttonPosition">Position:</span>
+                    <div class="position-options">
+                        <label class="position-option">
+                            <input type="radio" name="buttonPosition" value="top-left">
+                            <span class="position-icon">↖</span>
+                            <span data-i18n="posTopLeft">左上</span>
+                        </label>
+                        <label class="position-option">
+                            <input type="radio" name="buttonPosition" value="top-right" checked>
+                            <span class="position-icon">↗</span>
+                            <span data-i18n="posTopRight">右上</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="interaction-control">
+                    <span class="interaction-label" data-i18n="buttonSize">Button size:</span>
+                    <input type="range" id="buttonSize" min="20" max="30" step="2" value="26">
+                    <span id="buttonSizeValue" class="interaction-value">26px</span>
+                </div>
+                <div class="interaction-control">
+                    <span class="interaction-label" data-i18n="toolbarSpacing">Btn gap:</span>
+                    <input type="range" id="toolbarSpacing" min="2" max="10" step="1" value="7">
+                    <span id="toolbarSpacingValue" class="interaction-value">7px</span>
+                </div>
+                <div class="interaction-control">
+                    <span class="interaction-label" data-i18n="hoverDelay">Delay:</span>
+                    <input type="range" id="hoverDelay" min="500" max="2000" step="100" value="1000">
+                    <span id="delayValue" class="interaction-value">1.0s</span>
                 </div>
             </div>
 
@@ -65,6 +95,34 @@
                 <label for="baseSubfolder" data-i18n="baseSubfolderLabel">Base save directory:</label>
                 <input type="text" id="baseSubfolder" placeholder="image (optional)" data-i18n-placeholder="baseSubfolderPlaceholder">
                 <p class="help-text" data-i18n="baseSubfolderHelp">A parent folder inside Downloads. All paths (subfolder, multi-path) will be created under this directory.</p>
+            </div>
+
+            <!-- Multi-Path Save (outside Advanced, above Bulk Download) -->
+            <div class="setting-group multi-path-section">
+                <div class="enable-row">
+                    <span class="enable-label" data-i18n="multiPathEnableLabel">Multi-path download</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="multiPathEnabled">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div id="multiPathContainer" class="hidden-container">
+                    <div id="pathList"></div>
+                    <button type="button" id="addPathBtn" class="add-path-btn" data-i18n="addPathBtn">+ Add Path</button>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <h3 data-i18n="bulkDownload">Bulk Download:</h3>
+                <div class="bulk-download-buttons">
+                    <button id="downloadAllBtn" class="download-all-btn" data-i18n="galleryViewBtn">
+                        📦 Gallery View
+                    </button>
+                    <button id="downloadZipBtn" class="download-zip-btn" data-i18n="downloadZipBtn">
+                        🗜️ Download ZIP
+                    </button>
+                </div>
+                <p class="help-text" data-i18n="bulkDownloadHelp">Gallery opens images in a new tab. ZIP downloads all images as a compressed file.</p>
             </div>
 
             <div class="setting-group">
@@ -112,12 +170,9 @@
                                     <span data-i18n="noBorder">No border highlighting</span>
                                 </label>
                                 <label class="radio-label">
-                                    <input type="radio" name="borderHighlight" id="borderHighlightGray" value="gray">
-                                    <span data-i18n="subtleGrayBorder">Subtle gray border</span>
-                                </label>
-                                <label class="radio-label">
-                                    <input type="radio" name="borderHighlight" id="borderHighlightGreen" value="green">
-                                    <span data-i18n="brightGreenBorder">Bright green border</span>
+                                    <input type="radio" name="borderHighlight" id="borderHighlightCustom" value="custom">
+                                    <span data-i18n="customBorderColor">Custom border color</span>
+                                    <input type="color" id="borderHighlightColor" value="#00ff00" class="border-color-picker">
                                 </label>
                             </div>
                             <p class="adv-card-desc" data-i18n="visualFeedbackHelp">Show border around images when hovering (helps identify targetable images)</p>
@@ -165,37 +220,6 @@
                         </div>
                     </div>
                 </details>
-            </div>
-
-            <!-- Download Mode Indicator -->
-            <div class="setting-group download-mode-header">
-                <span class="download-mode-indicator" id="downloadModeIndicator"><span class="mode-label" data-i18n="downloadModeLabel">Current download mode:</span> <strong class="mode-value">Normal</strong></span>
-            </div>
-
-            <!-- Multi-Path Save (outside Advanced, above Bulk Download) -->
-            <div class="setting-group multi-path-section">
-                <label class="simple-checkbox">
-                    <input type="checkbox" id="multiPathEnabled">
-                    <span data-i18n="multiPathEnableLabel">Multi-path download</span>
-                </label>
-                <div id="multiPathContainer" style="display:none;">
-                    <p class="help-text" data-i18n="multiPathHelp">Each path shows as a separate hover button. Only works in Normal download mode.</p>
-                    <div id="pathList"></div>
-                    <button type="button" id="addPathBtn" class="add-path-btn" data-i18n="addPathBtn">+ Add Path</button>
-                </div>
-            </div>
-
-            <div class="setting-group">
-                <h3 data-i18n="bulkDownload">Bulk Download:</h3>
-                <div class="bulk-download-buttons">
-                    <button id="downloadAllBtn" class="download-all-btn" data-i18n="galleryViewBtn">
-                        📦 Gallery View
-                    </button>
-                    <button id="downloadZipBtn" class="download-zip-btn" data-i18n="downloadZipBtn">
-                        🗜️ Download ZIP
-                    </button>
-                </div>
-                <p class="help-text" data-i18n="bulkDownloadHelp">Gallery opens images in a new tab. ZIP downloads all images as a compressed file.</p>
             </div>
         </main>
 

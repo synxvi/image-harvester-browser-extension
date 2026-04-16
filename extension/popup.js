@@ -71,7 +71,14 @@ const i18n = {
             headerTitle: 'Image Harvester',
             headerSubtitle: 'Quick image download on hover',
             enableExtension: 'Enable extension',
-            hoverDelay: 'Icon appear delay:',
+            mediaDetection: 'Media detection',
+            hoverDelay: 'Delay:',
+            interactionSettings: 'Interaction Settings:',
+            buttonSize: 'Button size:',
+            toolbarSpacing: 'Btn gap:',
+            buttonPosition: 'Btn position:',
+            posTopRight: 'Top-right',
+            posTopLeft: 'Top-left',
             basicDetection: 'Basic media detection:',
             imgTags: 'IMG tags',
             videoElements: 'Video elements',
@@ -89,6 +96,7 @@ const i18n = {
             advancedDetectionHelp: 'Advanced detection modes (disabled by default)',
             visualFeedback: 'Visual feedback:',
             noBorder: 'No border highlighting',
+            customBorderColor: 'Custom border color',
             subtleGrayBorder: 'Subtle gray border',
             brightGreenBorder: 'Bright green border',
             visualFeedbackHelp: 'Show border around images when hovering',
@@ -139,7 +147,10 @@ const i18n = {
             statusBorderOff: 'Border highlighting disabled',
             statusBorderGray: 'Border highlighting enabled (gray)',
             statusBorderGreen: 'Border highlighting enabled (green)',
+            statusBorderCustom: 'Border highlight enabled ({color})',
             statusBorderSaveFailed: 'Failed to save border highlight setting',
+            statusButtonSizeSet: 'Button size set to {value}px',
+            statusToolbarSpacingSet: 'Button spacing set to {value}px',
             statusMinSizeSet: 'Minimum image size set to {value}px',
             statusMinSizeFailed: 'Failed to save minimum size',
             statusMinSizeInvalid: 'Please enter a value between 50 and 1000 pixels',
@@ -217,10 +228,17 @@ const i18n = {
             langEnglish: 'English',
             langChinese: '\u4E2D\u6587',
             langLabel: '\u8BED\u8A00\uFF1A',
-            headerTitle: '\u56FE\u7247\u60AC\u505C\u4FDD\u5B58',
-            headerSubtitle: '\u60AC\u505C\u5373\u53EF\u5FEB\u901F\u4E0B\u8F7D\u56FE\u7247',
+            headerTitle: 'Image Harvester',
+            headerSubtitle: '\u9F20\u6807\u60AC\u505C\u5FEB\u901F\u4E0B\u8F7D\u56FE\u7247',
             enableExtension: '\u542F\u7528\u6269\u5C55',
-            hoverDelay: '\u60AC\u505C\u56FE\u6807\u51FA\u73B0\u5EF6\u8FDF\uFF1A',
+            mediaDetection: '\u5A92\u4F53\u68C0\u6D4B',
+            hoverDelay: '\u60AC\u505C\u5EF6\u8FDF\uFF1A',
+            interactionSettings: '\u4EA4\u4E92\u8BBE\u7F6E\uFF1A',
+            buttonSize: '\u6309\u94AE\u5927\u5C0F\uFF1A',
+            toolbarSpacing: '\u6309\u94AE\u95F4\u8DDD\uFF1A',
+            buttonPosition: '\u6309\u94AE\u4F4D\u7F6E\uFF1A',
+            posTopRight: '\u53F3\u4E0A',
+            posTopLeft: '\u5DE6\u4E0A',
             basicDetection: '\u57FA\u7840\u5A92\u4F53\u68C0\u6D4B\uFF1A',
             imgTags: 'IMG \u6807\u7B7E',
             videoElements: '\u89C6\u9891\u5143\u7D20',
@@ -238,6 +256,7 @@ const i18n = {
             advancedDetectionHelp: '\u9AD8\u7EA7\u68C0\u6D4B\u6A21\u5F0F\uFF08\u9ED8\u8BA4\u5173\u95ED\uFF09',
             visualFeedback: '\u89C6\u89C9\u53CD\u9988\uFF1A',
             noBorder: '\u65E0\u8FB9\u6846\u9AD8\u4EAE',
+            customBorderColor: '\u81EA\u5B9A\u4E49\u8FB9\u6846\u989C\u8272',
             subtleGrayBorder: '\u6D45\u7070\u8272\u8FB9\u6846',
             brightGreenBorder: '\u4EAE\u7EFF\u8272\u8FB9\u6846',
             visualFeedbackHelp: '\u60AC\u505C\u65F6\u5728\u56FE\u7247\u5468\u56F4\u663E\u793A\u8FB9\u6846',
@@ -288,7 +307,10 @@ const i18n = {
             statusBorderOff: '\u8FB9\u6846\u9AD8\u4EAE\u5DF2\u7981\u7528',
             statusBorderGray: '\u8FB9\u6846\u9AD8\u4EAE\u5DF2\u542F\u7528\uFF08\u7070\u8272\uFF09',
             statusBorderGreen: '\u8FB9\u6846\u9AD8\u4EAE\u5DF2\u542F\u7528\uFF08\u7EFF\u8272\uFF09',
+            statusBorderCustom: '\u8FB9\u6846\u9AD8\u4EAE\u5DF2\u542F\u7528\uFF08{color}\uFF09',
             statusBorderSaveFailed: '\u4FDD\u5B58\u8FB9\u6846\u9AD8\u4EAE\u8BBE\u7F6E\u5931\u8D25',
+            statusButtonSizeSet: '\u6309\u94AE\u5927\u5C0F\u5DF2\u8BBE\u7F6E\u4E3A {value}px',
+            statusToolbarSpacingSet: '\u6309\u94AE\u95F4\u8DDD\u5DF2\u8BBE\u7F6E\u4E3A {value}px',
             statusMinSizeSet: '\u6700\u5C0F\u56FE\u7247\u5C3A\u5BF8\u5DF2\u8BBE\u7F6E\u4E3A {value}px',
             statusMinSizeFailed: '\u4FDD\u5B58\u6700\u5C0F\u5C3A\u5BF8\u5931\u8D25',
             statusMinSizeInvalid: '\u8F93\u5165 50 \u5230 1000 \u4E4B\u95F4\u7684\u6570\u503C',
@@ -516,7 +538,24 @@ async function initializePopup() {
         const delayValue = delay || CONFIG.DEFAULT_HOVER_DELAY;
         hoverDelay.value = delayValue;
         updateDelayDisplay(delayValue);
-        
+
+        // Set button size slider
+        const storedButtonSize = await storage.get('ih_button_size');
+        const buttonSizeVal = storedButtonSize || 26;
+        document.getElementById('buttonSize').value = buttonSizeVal;
+        document.getElementById('buttonSizeValue').textContent = buttonSizeVal + 'px';
+
+        // Set toolbar spacing slider
+        const storedToolbarSpacing = await storage.get('ih_toolbar_spacing');
+        const toolbarSpacingVal = storedToolbarSpacing || 7;
+        document.getElementById('toolbarSpacing').value = toolbarSpacingVal;
+        document.getElementById('toolbarSpacingValue').textContent = toolbarSpacingVal + 'px';
+
+        // Set button position radio
+        const storedPosition = await storage.get('ih_button_position') || 'top-right';
+        const posRadio = document.querySelector(`input[name="buttonPosition"][value="${storedPosition}"]`);
+        if (posRadio) posRadio.checked = true;
+
         // Set image detection checkboxes
         document.getElementById('detectImg').checked = detectImg !== false;
         document.getElementById('detectSvg').checked = detectSvg === true; // Disabled by default
@@ -525,7 +564,23 @@ async function initializePopup() {
         
         // Set border highlighting radio buttons
         const borderMode = borderHighlightMode || CONFIG.DEFAULT_BORDER_HIGHLIGHT;
-        document.getElementById('borderHighlight' + borderMode.charAt(0).toUpperCase() + borderMode.slice(1)).checked = true;
+        if (borderMode === 'custom') {
+            document.getElementById('borderHighlightCustom').checked = true;
+        } else if (borderMode === 'off') {
+            document.getElementById('borderHighlightOff').checked = true;
+        } else {
+            // 兼容旧值 gray/green → 迁移到 custom
+            const colorMap = { gray: '#888888', green: '#00ff00' };
+            document.getElementById('borderHighlightCustom').checked = true;
+            document.getElementById('borderHighlightColor').value = colorMap[borderMode] || '#00ff00';
+            await storage.set('ih_border_highlight_mode', 'custom');
+            await storage.set('ih_border_highlight_color', colorMap[borderMode] || '#00ff00');
+        }
+        // 加载已保存的自定义颜色
+        const borderColor = await storage.get('ih_border_highlight_color');
+        if (borderColor) {
+            document.getElementById('borderHighlightColor').value = borderColor;
+        }
         
         // Set experimental download mode
         const downloadMode = await storage.get('ih_download_mode') || 'normal';
@@ -569,7 +624,7 @@ async function initializePopup() {
         const multiPathCheckbox = document.getElementById('multiPathEnabled');
         if (multiPathCheckbox) {
             multiPathCheckbox.checked = multiPathEnabled === true;
-            document.getElementById('multiPathContainer').style.display = multiPathEnabled ? 'block' : 'none';
+            document.getElementById('multiPathContainer').classList.toggle('hidden-container', !multiPathEnabled);
             renderPathList(multiPaths || []);
         }
         
@@ -594,14 +649,10 @@ async function initializePopup() {
     }
 }
 
-// Set up download mode UI and indicator
+// Set up download mode UI
 function setupDownloadModeUI(currentMode) {
     const advancedSettings = document.getElementById('advancedSettings');
-    const downloadModeIndicator = document.getElementById('downloadModeIndicator');
-    
-    // Update indicator text and style
-    updateDownloadModeIndicator(currentMode);
-    
+
     // Set up auto-expand when experimental mode is selected
     const downloadModeRadios = document.querySelectorAll('input[name="downloadMode"]');
     downloadModeRadios.forEach(radio => {
@@ -611,31 +662,10 @@ function setupDownloadModeUI(currentMode) {
             }
         });
     });
-    
+
     // Auto-expand if experimental mode is already selected
     if (currentMode !== 'normal') {
         advancedSettings.open = true;
-    }
-}
-
-// Update download mode indicator
-function updateDownloadModeIndicator(mode) {
-    const indicator = document.getElementById('downloadModeIndicator');
-    if (!indicator) return;
-
-    const labelSpan = indicator.querySelector('.mode-label');
-    const modeStrong = indicator.querySelector('.mode-value');
-    
-    if (labelSpan) labelSpan.textContent = i18n.t('downloadModeLabel');
-    if (modeStrong) {
-        modeStrong.textContent = mode === 'normal' ? i18n.t('modeNormal') : i18n.t('modeCanvasExperimental');
-    }
-    
-    // Update styling based on mode
-    if (mode === 'normal') {
-        indicator.classList.remove('experimental');
-    } else {
-        indicator.classList.add('experimental');
     }
 }
 
@@ -651,9 +681,6 @@ function setupLanguageSelectorListener() {
     languageSelect.addEventListener('change', async (e) => {
         diag.log('languageSelect change event fired, new value:', e.target.value);
         await i18n.setLocale(e.target.value);
-        // Re-render dynamic elements that contain translated text
-        const downloadMode = await storage.get('ih_download_mode') || 'normal';
-        updateDownloadModeIndicator(downloadMode);
     });
 }
 
@@ -680,7 +707,7 @@ function setupEventListeners() {
     hoverDelay.addEventListener('input', (e) => {
         updateDelayDisplay(e.target.value);
     });
-    
+
     hoverDelay.addEventListener('change', async (e) => {
         const value = parseInt(e.target.value);
         const success = await storage.set('ih_hover_delay', value);
@@ -690,7 +717,51 @@ function setupEventListeners() {
             showStatus(i18n.t('statusDelaySaveFailed'), 'error');
         }
     });
-    
+
+    // 按钮大小滑块
+    const buttonSizeSlider = document.getElementById('buttonSize');
+    buttonSizeSlider.addEventListener('input', (e) => {
+        document.getElementById('buttonSizeValue').textContent = e.target.value + 'px';
+    });
+    buttonSizeSlider.addEventListener('change', async (e) => {
+        const value = parseInt(e.target.value);
+        const success = await storage.set('ih_button_size', value);
+        if (success) {
+            showStatus(i18n.tf('statusButtonSizeSet', { value }));
+            await notifyContentScriptSettingsChanged();
+        } else {
+            showStatus(i18n.t('statusSaveFailed'), 'error');
+        }
+    });
+
+    // 多路径工具栏间距滑块
+    const toolbarSpacingSlider = document.getElementById('toolbarSpacing');
+    toolbarSpacingSlider.addEventListener('input', (e) => {
+        document.getElementById('toolbarSpacingValue').textContent = e.target.value + 'px';
+    });
+    toolbarSpacingSlider.addEventListener('change', async (e) => {
+        const value = parseInt(e.target.value);
+        const success = await storage.set('ih_toolbar_spacing', value);
+        if (success) {
+            showStatus(i18n.tf('statusToolbarSpacingSet', { value }));
+            await notifyContentScriptSettingsChanged();
+        } else {
+            showStatus(i18n.t('statusSaveFailed'), 'error');
+        }
+    });
+
+    // 按钮位置 radio
+    document.querySelectorAll('input[name="buttonPosition"]').forEach(radio => {
+        radio.addEventListener('change', async (e) => {
+            if (e.target.checked) {
+                const success = await storage.set('ih_button_position', e.target.value);
+                if (success) {
+                    await notifyContentScriptSettingsChanged();
+                }
+            }
+        });
+    });
+
     // Bulk download buttons
     downloadAllBtn.addEventListener('click', handleGalleryView);
     downloadZipBtn.addEventListener('click', handleDownloadZip);
@@ -786,9 +857,6 @@ function setupImageDetectionListeners() {
                     const msgKey = e.target.value === 'normal' ? 'statusModeNormal' : 'statusModeCanvas';
                     showStatus(i18n.t(msgKey));
 
-                    // Update the indicator
-                    updateDownloadModeIndicator(e.target.value);
-
                     // Lock/unlock multi-path based on mode
                     updateMultiPathAvailability(e.target.value);
                 } else {
@@ -796,7 +864,6 @@ function setupImageDetectionListeners() {
                     // Revert to previous selection
                     const currentMode = await storage.get('ih_download_mode') || 'normal';
                     document.getElementById('downloadMode' + currentMode.charAt(0).toUpperCase() + currentMode.slice(1)).checked = true;
-                    updateDownloadModeIndicator(currentMode);
                 }
             }
         });
@@ -806,20 +873,27 @@ function setupImageDetectionListeners() {
     borderHighlightRadios.forEach(radio => {
         radio.addEventListener('change', async (e) => {
             if (e.target.checked) {
-                const success = await storage.set('ih_border_highlight_mode', e.target.value);
-                if (success) {
-                    const msgKey = e.target.value === 'off' ? 'statusBorderOff' :
-                                   e.target.value === 'gray' ? 'statusBorderGray' : 'statusBorderGreen';
-                    showStatus(i18n.t(msgKey));
-                    await notifyContentScriptSettingsChanged();
+                const mode = e.target.value;
+                if (mode === 'custom') {
+                    const color = document.getElementById('borderHighlightColor').value;
+                    await storage.set('ih_border_highlight_mode', 'custom');
+                    await storage.set('ih_border_highlight_color', color);
+                    showStatus(i18n.tf('statusBorderCustom', { color }));
                 } else {
-                    showStatus(i18n.t('statusBorderSaveFailed'), 'error');
-                    // Revert to previous selection
-                    const currentMode = await storage.get('ih_border_highlight_mode') || 'off';
-                    document.getElementById('borderHighlight' + currentMode.charAt(0).toUpperCase() + currentMode.slice(1)).checked = true;
+                    await storage.set('ih_border_highlight_mode', 'off');
+                    showStatus(i18n.t('statusBorderOff'));
                 }
+                await notifyContentScriptSettingsChanged();
             }
         });
+    });
+
+    // 颜色选择器变更：自动切换到 custom 模式
+    document.getElementById('borderHighlightColor').addEventListener('input', async (e) => {
+        document.getElementById('borderHighlightCustom').checked = true;
+        await storage.set('ih_border_highlight_mode', 'custom');
+        await storage.set('ih_border_highlight_color', e.target.value);
+        await notifyContentScriptSettingsChanged();
     });
     
     // Minimum image size input
@@ -1112,22 +1186,22 @@ function updateMultiPathAvailability(downloadMode) {
             storage.get('ih_multi_paths').then(paths => {
                 if (Array.isArray(paths) && paths.some(p => p.name && p.path)) {
                     multiPathCheckbox.checked = true;
-                    multiPathContainer.style.display = 'block';
+                    multiPathContainer.classList.remove('hidden-container');
                     storage.set('ih_multi_path_enabled', true).catch(() => {});
                 }
             });
         }
-        multiPathContainer.style.display = multiPathCheckbox.checked ? 'block' : 'none';
+        multiPathContainer.classList.toggle('hidden-container', !multiPathCheckbox.checked);
     } else {
         // Disable: lock checkbox, hide container, show visual hint
         if (multiPathCheckbox.checked) {
             multiPathCheckbox.checked = false;
             storage.set('ih_multi_path_enabled', false).catch(() => {});
-            multiPathContainer.style.display = 'none';
+            multiPathContainer.classList.add('hidden-container');
         }
         multiPathCheckbox.disabled = true;
         if (multiPathContainer) {
-            multiPathContainer.style.display = 'none';
+            multiPathContainer.classList.add('hidden-container');
         }
         if (multiPathSection) {
             multiPathSection.style.opacity = '0.5';
@@ -1144,7 +1218,7 @@ function setupMultiPathListeners() {
     if (multiPathCheckbox && multiPathContainer) {
         multiPathCheckbox.addEventListener('change', async (e) => {
             const enabled = e.target.checked;
-            multiPathContainer.style.display = enabled ? 'block' : 'none';
+            multiPathContainer.classList.toggle('hidden-container', !enabled);
             const success = await storage.set('ih_multi_path_enabled', enabled);
             if (success) {
                 showStatus(enabled ? i18n.t('statusMultiPathOn') : i18n.t('statusMultiPathOff'));
@@ -1152,7 +1226,7 @@ function setupMultiPathListeners() {
             } else {
                 showStatus(i18n.t('statusSaveFailed'), 'error');
                 e.target.checked = !enabled;
-                multiPathContainer.style.display = enabled ? 'none' : 'block';
+                multiPathContainer.classList.toggle('hidden-container', enabled);
             }
         });
     }

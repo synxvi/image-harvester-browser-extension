@@ -54,6 +54,12 @@ let multiPaths = [];
 let currentDownloadMode = 'normal'; // cached for sync decision in showDownloadButton
 let contentLocale = 'en'; // 用户语言偏好，用于 toast 国际化
 
+// 交互设置
+let buttonSize = 26;        // 悬浮按钮大小（px）
+let toolbarSpacing = 7;     // 多路径工具栏按钮间距（px）
+let buttonPosition = 'top-right'; // 按钮弹出位置
+let borderHighlightColor = '#00ff00'; // 自定义边框颜色
+
 // URL 转换策略
 let urlStrategies = [];
 let activeStrategy = null;
@@ -168,17 +174,9 @@ const storage = {
 
 // Generate CSS for border highlighting
 function generateBorderCSS() {
-    const grayColor = CONFIG.BORDER_COLORS.gray;
-    const greenColor = CONFIG.BORDER_COLORS.green;
-    
     return `
-.ih-border-highlight-gray {
-    outline: ${CONFIG.BORDER_WIDTH} ${CONFIG.BORDER_STYLE} ${grayColor} !important;
-    outline-offset: 1px !important;
-    transition: outline 0.2s ease !important;
-}
-.ih-border-highlight-green {
-    outline: ${CONFIG.BORDER_WIDTH} ${CONFIG.BORDER_STYLE} ${greenColor} !important;
+.ih-border-highlight-custom {
+    outline: ${CONFIG.BORDER_WIDTH} ${CONFIG.BORDER_STYLE} ${borderHighlightColor} !important;
     outline-offset: 1px !important;
     transition: outline 0.2s ease !important;
 }
@@ -198,20 +196,16 @@ function injectBorderCSS() {
 // Add/remove border highlight
 function toggleBorderHighlight(element, show) {
     if (borderHighlightMode === 'off') return;
-    
+
     // Check if element exists and has classList
     if (!element || !element.classList) return;
-    
+
     // Remove any existing border classes
     const classesToRemove = Array.from(element.classList).filter(cls => cls.startsWith('ih-border-highlight-'));
     element.classList.remove(...classesToRemove);
-    
+
     if (show) {
-        if (borderHighlightMode === 'gray') {
-            element.classList.add('ih-border-highlight-gray');
-        } else if (borderHighlightMode === 'green') {
-            element.classList.add('ih-border-highlight-green');
-        }
+        element.classList.add('ih-border-highlight-custom');
     }
 }
 
@@ -360,6 +354,10 @@ async function initializeExtension() {
         const multiPathsSetting = await storage.get('ih_multi_paths');
         const downloadModeSetting = await storage.get('ih_download_mode');
 
+        // 交互设置
+        const buttonSizeSetting = await storage.get('ih_button_size');
+        const toolbarSpacingSetting = await storage.get('ih_toolbar_spacing');
+
         // 加载 URL 转换策略（合并内置预设，确保新预设自动补充）
         const strategiesSetting = await storage.get('ih_url_strategies');
         urlStrategies = mergeStrategiesWithPresets(strategiesSetting);
@@ -395,6 +393,23 @@ async function initializeExtension() {
         multiPathEnabled = multiPathEnabledSetting === true; // Default: false
         multiPaths = (Array.isArray(multiPathsSetting) ? multiPathsSetting : []).filter(p => p.enabled !== false);
         currentDownloadMode = downloadModeSetting || 'normal';
+
+        // 交互设置赋值
+        buttonSize = buttonSizeSetting || 26;
+        toolbarSpacing = toolbarSpacingSetting || 7;
+        const buttonPositionSetting = await storage.get('ih_button_position');
+        buttonPosition = buttonPositionSetting || 'top-right';
+
+        // 视觉反馈自定义颜色
+        borderHighlightColor = (await storage.get('ih_border_highlight_color')) || '#00ff00';
+        // 兼容旧值 gray/green → 迁移到 custom
+        if (borderHighlightMode === 'gray') {
+            borderHighlightColor = '#888888';
+            borderHighlightMode = 'custom';
+        } else if (borderHighlightMode === 'green') {
+            borderHighlightColor = '#00ff00';
+            borderHighlightMode = 'custom';
+        }
         
         // Check domain exclusions
         await checkDomainExclusion();
@@ -427,7 +442,12 @@ function createDownloadButton() {
     button.className = 'ih-download-btn';
     button.innerHTML = '💾';
     button.title = activeStrategy ? `Save image (via ${activeStrategy.name})` : 'Save image';
-    
+
+    // 应用动态按钮大小
+    button.style.width = buttonSize + 'px';
+    button.style.height = buttonSize + 'px';
+    button.style.fontSize = Math.round(buttonSize * 0.5) + 'px';
+
     button.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -450,6 +470,15 @@ function createDownloadToolbar(img) {
     activePaths.forEach((pathConfig, displayIndex) => {
         const btn = document.createElement('div');
         btn.className = 'ih-toolbar-btn';
+
+        // 应用动态按钮大小和间距
+        const scale = buttonSize / 26; // 基准值 26px
+        btn.style.padding = Math.round(5 * scale) + 'px ' + Math.round(10 * scale) + 'px';
+        btn.style.fontSize = Math.round(11 * scale) + 'px';
+        btn.style.borderRadius = Math.round(10 * scale) + 'px';
+        if (displayIndex < activePaths.length - 1) {
+            btn.style.marginBottom = toolbarSpacing + 'px';
+        }
         
         // Use name (e.g. "📷 相册") or fallback to path folder
         const label = pathConfig.name || pathConfig.path || ('Path ' + (displayIndex + 1));
@@ -485,9 +514,15 @@ function positionButton(img, button) {
     button.style.position = 'fixed';
     const GAP = 8;
 
-    button.style.right = (vpRight - rect.right + GAP) + 'px';
+    if (buttonPosition === 'top-left') {
+        button.style.left = (rect.left + GAP) + 'px';
+        button.style.right = 'auto';
+    } else {
+        // 默认右上角
+        button.style.right = (vpRight - rect.right + GAP) + 'px';
+        button.style.left = 'auto';
+    }
     button.style.top = (rect.top + GAP) + 'px';
-    button.style.left = 'auto';
 }
 
 // 图片 load 事件处理：src 变更后新图加载完成时重定位按钮
@@ -1128,7 +1163,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }
             if (message.settings.borderHighlightMode !== undefined) {
                 borderHighlightMode = message.settings.borderHighlightMode;
-                
+
                 // Inject or remove border CSS
                 if (borderHighlightMode !== 'off') {
                     injectBorderCSS();
@@ -1143,6 +1178,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     });
                 }
             }
+
+            // 交互设置：从 storage 重新读取以确保同步
+            storage.get('ih_button_size').then(val => { buttonSize = val || 26; });
+            storage.get('ih_toolbar_spacing').then(val => { toolbarSpacing = val || 7; });
+            storage.get('ih_button_position').then(val => { buttonPosition = val || 'top-right'; });
+            storage.get('ih_border_highlight_color').then(val => {
+                borderHighlightColor = val || '#00ff00';
+                // 重新注入 CSS 以应用新颜色
+                if (borderHighlightMode !== 'off') {
+                    const existingStyle = document.getElementById('ih-border-styles');
+                    if (existingStyle) {
+                        existingStyle.textContent = generateBorderCSS();
+                    } else {
+                        injectBorderCSS();
+                    }
+                }
+            });
             
             debug.log('Settings updated:', { 
                 detectImg, detectVideo, detectSvg, detectBackground, minImageSize, convertWebpToPng, borderHighlightMode 
