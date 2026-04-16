@@ -68,12 +68,6 @@ For sites with hotlink protection or other restrictions:
 
 ## Install
 
-### Chrome Web Store (Recommended)
-
-[Install from Chrome Web Store](https://chromewebstore.google.com/detail/image-harvester/lhmljebjlhdafkminimimaokjliabegg)
-
-> The Web Store version may lag behind the latest release. For the newest features, use the manual method below.
-
 ### Manual Load (Developer Mode)
 
 1. Clone or download this repository

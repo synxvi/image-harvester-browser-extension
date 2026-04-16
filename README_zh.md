@@ -69,12 +69,6 @@
 
 ## 安装
 
-### Chrome Web Store 安装（推荐）
-
-[前往 Chrome Web Store 安装](https://chromewebstore.google.com/detail/image-harvester/lhmljebjlhdafkminimimaokjliabegg)
-
-> Web Store 版本可能不是最新版本，如需最新功能请使用手动安装。
-
 ### 手动加载（开发者模式）
 
 1. 克隆或下载本项目代码
