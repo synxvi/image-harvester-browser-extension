@@ -5,7 +5,7 @@ body {
     font-size: 13px;
     margin: 0;
     padding: 0;
-    width: 360px;
+    width: 340px;
     background: #f8f9fa;
     color: #333;
     line-height: 1.4;
@@ -286,8 +286,6 @@ main {
     cursor: pointer;
     flex-shrink: 0;
     margin: 0;
-    position: relative;
-    top: 3px;
 }
 
 /* Section Labels */
@@ -578,8 +576,6 @@ input[type="number"]:focus {
     min-width: 15px;
     min-height: 15px;
     flex-shrink: 0;
-    position: relative;
-    top: 3px;
 }
 
 .radio-label span {
