@@ -24,7 +24,7 @@ const hostnameToRuleId = new Map();
 // Helper: update badge for specific tab
 function updateBadge(disabled, excluded = false, tabId = null) {
     const text = disabled ? 'OFF' : (excluded ? 'X' : '');
-    const color = disabled ? '#d00' : '#c08040';
+    const color = '#c08040';
     
     if (tabId) {
         chrome.action.setBadgeText({ text, tabId });
@@ -40,12 +40,14 @@ function updateBadge(disabled, excluded = false, tabId = null) {
     debug.log(`Badge updated: text="${text}", color="${color}", tabId=${tabId || 'all'}`);
 }
 
-// Set default settings on install
-chrome.runtime.onInstalled.addListener(() => {
-    chrome.storage.sync.set({
-        ih_enabled: true,
-        ih_hover_delay: CONFIG.DEFAULT_HOVER_DELAY
-    });
+// Set default settings on install (仅在首次安装时设置，重新加载不覆盖用户设置)
+chrome.runtime.onInstalled.addListener((details) => {
+    if (details.reason === 'install') {
+        chrome.storage.sync.set({
+            ih_enabled: true,
+            ih_hover_delay: CONFIG.DEFAULT_HOVER_DELAY
+        });
+    }
     
     // Set initial badge state
     updateBadge(false, false);
@@ -147,9 +149,10 @@ function debouncedUpdateBadgeForTab(tabId, url) {
 
 // Re-check badge when user switches tabs
 chrome.tabs.onActivated.addListener((activeInfo) => {
-    chrome.tabs.get(activeInfo.tabId, (tab) => {
-        if (chrome.runtime.lastError) return;
+    chrome.tabs.get(activeInfo.tabId).then((tab) => {
         updateBadgeForTab(tab.id, tab.url);
+    }).catch(() => {
+        // 标签页可能已被关闭
     });
 });
 

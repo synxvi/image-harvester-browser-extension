@@ -1161,6 +1161,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (message.settings.convertWebpToPng !== undefined) {
                 convertWebpToPng = message.settings.convertWebpToPng;
             }
+            if (message.settings.hoverDelay !== undefined) {
+                hoverDelay = message.settings.hoverDelay;
+                debug.log('Hover delay updated:', hoverDelay);
+            }
             if (message.settings.borderHighlightMode !== undefined) {
                 borderHighlightMode = message.settings.borderHighlightMode;
 

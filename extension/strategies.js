@@ -2,7 +2,7 @@
 // Copyright (c) Jaewoo Jeon (@thejjw) and Image Harvester Contributors
 // SPDX-License-Identifier: zlib-acknowledgement
 
-const EXTENSION_VERSION = '1.4.2';
+const EXTENSION_VERSION = '1.6.1';
 
 const DEBUG = false;
 

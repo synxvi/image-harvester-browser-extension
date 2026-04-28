@@ -6,7 +6,7 @@ body {
     margin: 0;
     padding: 0;
     width: 340px;
-    background: #f8f9fa;
+    background: #FFFBF0;
     color: #333;
     line-height: 1.4;
 }
@@ -20,7 +20,7 @@ body {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     /* Slim custom scrollbar */
     scrollbar-width: thin;
-    scrollbar-color: rgba(11, 165, 201, 0.25) transparent;
+    scrollbar-color: rgba(200, 136, 0, 0.25) transparent;
 }
 
 .container::-webkit-scrollbar {
@@ -32,16 +32,16 @@ body {
 }
 
 .container::-webkit-scrollbar-thumb {
-    background: rgba(11, 165, 201, 0.25);
+    background: rgba(200, 136, 0, 0.25);
     border-radius: 10px;
 }
 
 .container::-webkit-scrollbar-thumb:hover {
-    background: rgba(11, 165, 201, 0.45);
+    background: rgba(200, 136, 0, 0.45);
 }
 
 header {
-    background: linear-gradient(135deg, #0e8cea 0%, #09c 50%, #0abf8a 100%);
+    background: linear-gradient(135deg, #E8A800 0%, #D47A00 50%, #C64520 100%);
     color: white;
     padding: 16px 16px 12px;
     text-align: center;
@@ -108,7 +108,7 @@ main {
 
 .setting-group {
     background: white;
-    border: 1px solid #e2e6ee;
+    border: 1px solid #E8DFC8;
     border-radius: 8px;
     padding: 12px;
     margin-bottom: 12px;
@@ -116,7 +116,7 @@ main {
 }
 
 .setting-group:hover {
-    border-color: #b0b8cc;
+    border-color: #D4C4A0;
 }
 
 .setting-group:last-child {
@@ -177,7 +177,7 @@ main {
 }
 
 .toggle-switch input:checked + .toggle-slider {
-    background: #0ba5c9;
+    background: #C88800;
 }
 
 .toggle-switch input:checked + .toggle-slider::before {
@@ -188,7 +188,7 @@ main {
 .detection-section {
     margin-top: 10px;
     padding-top: 10px;
-    border-top: 1px solid #edf0f5;
+    border-top: 1px solid #F0E8D8;
 }
 
 .detection-title {
@@ -229,20 +229,20 @@ main {
     font-size: 12px;
     font-weight: 500;
     border: 1.5px solid #d5d9e8;
-    background: #f8f9fc;
+    background: #FFF8E1;
     color: #6b7280;
     transition: all 0.2s ease;
 }
 
 .chip:hover span {
-    border-color: #0ba5c9;
+    border-color: #C88800;
     color: #555;
 }
 
 .chip input:checked + span {
-    background: #e0f4f9;
-    border-color: #0ba5c9;
-    color: #0991ab;
+    background: #FFF3CD;
+    border-color: #C88800;
+    color: #9A6F00;
 }
 
 /* ===== Unified Checkbox Style ===== */
@@ -282,7 +282,7 @@ main {
     height: 15px;
     min-width: 15px;
     min-height: 15px;
-    accent-color: #0ba5c9;
+    accent-color: #C88800;
     cursor: pointer;
     flex-shrink: 0;
     margin: 0;
@@ -332,7 +332,7 @@ main {
     -webkit-appearance: none;
     width: 14px;
     height: 14px;
-    background: #0ba5c9;
+    background: #C88800;
     border-radius: 50%;
     cursor: pointer;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -341,7 +341,7 @@ main {
 .interaction-control input[type="range"]::-moz-range-thumb {
     width: 14px;
     height: 14px;
-    background: #0ba5c9;
+    background: #C88800;
     border-radius: 50%;
     cursor: pointer;
     border: none;
@@ -351,7 +351,7 @@ main {
 .interaction-value {
     font-size: 12px;
     font-weight: 600;
-    color: #0ba5c9;
+    color: #C88800;
     min-width: 36px;
     text-align: left;
 }
@@ -392,7 +392,7 @@ main {
 }
 
 .position-option:hover {
-    border-color: #0ba5c9;
+    border-color: #C88800;
     color: #333;
 }
 
@@ -401,14 +401,9 @@ main {
 }
 
 .position-option:has(input:checked) {
-    background: #e8f6fa;
-    border-color: #0ba5c9;
-    color: #0ba5c9;
-}
-
-.position-icon {
-    font-size: 14px;
-    line-height: 1;
+    background: #FFF8E1;
+    border-color: #C88800;
+    color: #C88800;
 }
 
 .help-text {
@@ -428,8 +423,8 @@ h3 {
 /* Footer */
 footer {
     padding: 12px 16px;
-    background: #f8f9fa;
-    border-top: 1px solid #e9ecef;
+    background: #FFFBF0;
+    border-top: 1px solid #E8DFC8;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -474,21 +469,21 @@ footer {
 }
 
 .download-all-btn {
-    background: #28a745;
+    background: #C64520;
     color: white;
 }
 
 .download-all-btn:hover {
-    background: #218838;
+    background: #A83818;
 }
 
 .download-zip-btn {
-    background: #007bff;
+    background: #C88800;
     color: white;
 }
 
 .download-zip-btn:hover {
-    background: #0056b3;
+    background: #A06E00;
 }
 
 .download-all-btn:active,
@@ -507,12 +502,12 @@ footer {
     cursor: pointer;
     transition: all 0.2s ease;
     text-align: center;
-    background: #6c757d;
+    background: #8D6E3F;
     color: white;
 }
 
 .exclusion-btn:hover {
-    background: #545b62;
+    background: #745A30;
 }
 
 .exclusion-btn:active {
@@ -531,8 +526,8 @@ input[type="text"] {
 
 input[type="text"]:focus {
     outline: none;
-    border-color: #0ba5c9;
-    box-shadow: 0 0 0 2px rgba(11, 165, 201, 0.2);
+    border-color: #C88800;
+    box-shadow: 0 0 0 2px rgba(200, 136, 0, 0.2);
 }
 
 /* Number Input */
@@ -547,8 +542,8 @@ input[type="number"] {
 
 input[type="number"]:focus {
     outline: none;
-    border-color: #0ba5c9;
-    box-shadow: 0 0 0 3px rgba(11, 165, 201, 0.1);
+    border-color: #C88800;
+    box-shadow: 0 0 0 3px rgba(200, 136, 0, 0.1);
 }
 
 /* Radio Groups */
@@ -570,7 +565,7 @@ input[type="number"]:focus {
 
 .radio-label input[type="radio"] {
     margin: 0;
-    accent-color: #0ba5c9;
+    accent-color: #C88800;
     width: 15px;
     height: 15px;
     min-width: 15px;
@@ -656,16 +651,16 @@ details summary::-webkit-details-marker {
 }
 
 details summary:hover {
-    color: #0ba5c9;
+    color: #C88800;
 }
 
 details summary:hover::after {
-    color: #0ba5c9;
+    color: #C88800;
 }
 
 details[open] summary {
     padding-bottom: 8px;
-    border-bottom: 1px solid #edf0f5;
+    border-bottom: 1px solid #F0E8D8;
     margin-bottom: 10px;
 }
 
@@ -688,14 +683,14 @@ details[open] summary::after {
 
 .adv-card {
     background: white;
-    border: 1px solid #e2e6ee;
+    border: 1px solid #E8DFC8;
     border-radius: 6px;
     padding: 10px 12px;
     transition: border-color 0.2s;
 }
 
 .adv-card:hover {
-    border-color: #b0b8cc;
+    border-color: #D4C4A0;
 }
 
 .adv-card-header {
@@ -730,7 +725,7 @@ details[open] summary::after {
 
 .adv-card-divider {
     height: 1px;
-    background: #edf0f5;
+    background: #F0E8D8;
     margin: 10px 0;
 }
 
@@ -749,12 +744,12 @@ details[open] summary::after {
 }
 
 .adv-card-actions .exclusion-btn {
-    background: #6c757d;
+    background: #8D6E3F;
     color: white;
 }
 
 .adv-card-actions .exclusion-btn:hover {
-    background: #545b62;
+    background: #745A30;
 }
 
 .adv-card-actions .reset-btn {
@@ -787,9 +782,9 @@ details[open] summary::after {
     flex: 1;
     min-width: 0;
     font-size: 13px;
-    color: #4a3570;
-    background: #f8f5fc;
-    border: 1px solid #d5c8e8;
+    color: #6B4E1F;
+    background: #FFF8E1;
+    border: 1px solid #E8D5A0;
     border-radius: 6px;
     padding: 5px 10px;
     overflow: hidden;
@@ -806,12 +801,12 @@ details[open] summary::after {
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s ease;
-    background: #8e6abf;
+    background: #B8860B;
     color: white;
 }
 
 .exclude-site-btn:hover {
-    background: #7b57ad;
+    background: #996F09;
 }
 
 .exclude-site-btn:active {
@@ -819,8 +814,8 @@ details[open] summary::after {
 }
 
 .exclude-site-btn.excluded {
-    background: #e0d4ee;
-    color: #7b57ad;
+    background: #FFF3CD;
+    color: #996F09;
 }
 
 /* ===== Base Subfolder Section ===== */
@@ -857,14 +852,14 @@ details[open] summary::after {
 }
 
 .multi-path-section .help-text {
-    color: #5c6bc0;
+    color: #A67C00;
     margin: 0 0 10px 0;
 }
 
 #multiPathContainer {
     margin-top: 10px;
     padding-top: 10px;
-    border-top: 1px solid #edf0f5;
+    border-top: 1px solid #F0E8D8;
 }
 
 #pathList {
@@ -886,7 +881,7 @@ details[open] summary::after {
 }
 
 .path-item:hover {
-    border-color: #0ba5c9;
+    border-color: #C88800;
 }
 
 .path-item .path-name {
@@ -928,9 +923,9 @@ details[open] summary::after {
 }
 
 .reorder-btn:hover:not(:disabled) {
-    background: #e8eaf6;
-    border-color: #0ba5c9;
-    color: #0ba5c9;
+    background: #FFF8E1;
+    border-color: #C88800;
+    color: #C88800;
 }
 
 .reorder-btn:disabled {
@@ -975,7 +970,7 @@ details[open] summary::after {
 }
 
 .add-path-btn:hover {
-    border-color: #0ba5c9;
-    color: #0ba5c9;
-    background: #f0f4ff;
+    border-color: #C88800;
+    color: #C88800;
+    background: #FFF8E1;
 }

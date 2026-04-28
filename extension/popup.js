@@ -6,7 +6,7 @@
 // - JSZip v3.10.1 (MIT) - Copyright (c) 2009-2016 Stuart Knightley, David Duponchel, Franz Buchinger, António Afonso
 
 // Extension version - update this when releasing new versions
-const EXTENSION_VERSION = '1.6.0';
+const EXTENSION_VERSION = '1.6.1';
 
 // Debug flag - set to false to disable all console output
 const DEBUG = true; // TEMP: enable for i18n debugging
@@ -171,6 +171,7 @@ const i18n = {
             statusGalleryFailed: 'Failed to create gallery',
             statusJszipNotAvailable: 'JSZip library not available',
             statusContentScriptError: 'Failed to communicate with page content script',
+            statusUnsupportedPage: 'This page does not support image scanning',
             statusContentScriptNoResponse: 'Content script did not respond',
             statusDownloading: 'Downloading {count} images...',
             statusDownloadProgress: 'Downloaded {current}/{total} images...',
@@ -331,6 +332,7 @@ const i18n = {
             statusGalleryFailed: '\u521B\u5EFA\u56FE\u5E93\u5931\u8D25',
             statusJszipNotAvailable: 'JSZip \u5E93\u4E0D\u53EF\u7528',
             statusContentScriptError: '\u65E0\u6CD5\u4E0E\u9875\u9762\u5185\u5BB9\u811A\u672C\u901A\u4FE1',
+            statusUnsupportedPage: '\u5F53\u524D\u9875\u9762\u4E0D\u652F\u6301\u56FE\u7247\u626B\u63CF',
             statusContentScriptNoResponse: '\u5185\u5BB9\u811A\u672C\u65E0\u54CD\u5E94',
             statusDownloading: '\u6B63\u5728\u4E0B\u8F7D {count} \u5F20\u56FE\u7247...',
             statusDownloadProgress: '\u5DF2\u4E0B\u8F7D {current}/{total} \u5F20\u56FE\u7247...',
@@ -697,6 +699,7 @@ function setupEventListeners() {
         const success = await storage.set('ih_enabled', e.target.checked);
         if (success) {
             showStatus(e.target.checked ? i18n.t('statusEnabled') : i18n.t('statusDisabled'));
+            await notifyContentScriptSettingsChanged();
         } else {
             showStatus(i18n.t('statusSaveFailed'), 'error');
             e.target.checked = !e.target.checked; // Revert
@@ -713,6 +716,7 @@ function setupEventListeners() {
         const success = await storage.set('ih_hover_delay', value);
         if (success) {
             showStatus(i18n.tf('statusDelaySet', { value: (value / 1000).toFixed(1) }));
+            await notifyContentScriptSettingsChanged();
         } else {
             showStatus(i18n.t('statusDelaySaveFailed'), 'error');
         }
@@ -954,6 +958,7 @@ function setupImageDetectionListeners() {
                 } else {
                     showStatus(i18n.t('statusSubfolderDirect'));
                 }
+                await notifyContentScriptSettingsChanged();
             } else {
                 showStatus(i18n.t('statusSubfolderFailed'), 'error');
             }
@@ -974,6 +979,7 @@ function setupImageDetectionListeners() {
                 } else {
                     showStatus('Base dir cleared, saving to Downloads/');
                 }
+                await notifyContentScriptSettingsChanged();
             } else {
                 showStatus('Failed to save base directory setting', 'error');
             }
@@ -1250,7 +1256,8 @@ async function getCurrentSettings() {
         const minImageSize = await storage.get('ih_min_image_size');
         const borderHighlightMode = await storage.get('ih_border_highlight_mode');
         const longHideDelay = await storage.get('ih_long_hide_delay');
-        
+        const hoverDelaySetting = await storage.get('ih_hover_delay');
+
         return {
             detectImg: detectImg !== false, // Default: true
             detectSvg: detectSvg === true, // Default: false
@@ -1258,6 +1265,7 @@ async function getCurrentSettings() {
             detectVideo: detectVideo !== false, // Default: true
             convertWebpToPng: convertWebpToPng === true, // Default: false
             longHideDelay: longHideDelay === true, // Default: false
+            hoverDelay: hoverDelaySetting || CONFIG.DEFAULT_HOVER_DELAY,
             borderHighlightMode: borderHighlightMode || CONFIG.DEFAULT_BORDER_HIGHLIGHT, // Default: 'off'
             minImageSize: minImageSize || CONFIG.MIN_IMAGE_SIZE,
             allowedExtensions: (allowedExtensions || CONFIG.DEFAULT_EXTENSIONS_STRING)
@@ -1288,15 +1296,30 @@ async function handleGalleryView() {
         
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
         debug.log('Active tab:', activeTab);
-        
+
+        // 检查是否为支持 content script 注入的页面
+        const url = activeTab.url || '';
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            debug.warn('Unsupported page for gallery view:', url);
+            showStatus(i18n.t('statusUnsupportedPage'), 'info');
+            return;
+        }
+
         const settings = await getCurrentSettings();
         debug.log('Current settings:', settings);
-        
+
         debug.log('Sending message to content script...');
-        const response = await chrome.tabs.sendMessage(activeTab.id, {
-            type: 'scan_images',
-            settings: settings
-        });
+        let response;
+        try {
+            response = await chrome.tabs.sendMessage(activeTab.id, {
+                type: 'scan_images',
+                settings: settings
+            });
+        } catch (e) {
+            debug.error('Content script not available:', e.message);
+            showStatus(i18n.t('statusContentScriptError'), 'error');
+            return;
+        }
         
         debug.log('Response from content script:', response);
         
@@ -1316,7 +1339,7 @@ async function handleGalleryView() {
         
         // Create gallery HTML
         debug.log('Creating gallery HTML...');
-        const galleryHtml = createGalleryHtml(images, activeTab.title);
+        const galleryHtml = await createGalleryHtml(images, activeTab.title);
         debug.log('Gallery HTML length:', galleryHtml.length);
         
         // Open gallery in new tab
@@ -1350,7 +1373,14 @@ async function handleDownloadZip() {
         
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
         debug.log('[IH Popup] Active tab:', activeTab.url);
-        
+
+        // 检查是否为支持 content script 注入的页面
+        if (!activeTab.url || (!activeTab.url.startsWith('http://') && !activeTab.url.startsWith('https://'))) {
+            debug.warn('[IH Popup] Unsupported page for ZIP download:', activeTab.url);
+            showStatus(i18n.t('statusUnsupportedPage'), 'info');
+            return;
+        }
+
         const settings = await getCurrentSettings();
         debug.log('[IH Popup] Current settings:', settings);
         
@@ -1537,7 +1567,7 @@ function getExtensionFromType(type) {
 }
 
 // Create gallery HTML (internationalized)
-function createGalleryHtml(images, pageTitle) {
+async function createGalleryHtml(images, pageTitle) {
     const title = pageTitle ? i18n.tf('galleryTitle', { title: pageTitle }) : i18n.t('galleryTitleFallback');
     const locale = i18n.getEffectiveLocale();
     const langAttr = locale === 'zh_CN' ? 'zh-CN' : 'en';
@@ -1584,7 +1614,7 @@ function createGalleryHtml(images, pageTitle) {
         `;
     }).join('');
     
-    const foundText = i18n.tf('galleryFound', { total: images.length, visible: images.length });
+    const foundText = i18n.tf('galleryFound', { total: images.length, visible: `<span id="visibleCount">${images.length}</span>` });
     const tipText = i18n.t('galleryTip');
     const filterBySizeLabel = i18n.t('galleryFilterBySize');
     const widthLabel = i18n.t('galleryWidth');
@@ -1598,7 +1628,16 @@ function createGalleryHtml(images, pageTitle) {
     
     // Inline gallery script translations (serialized into the generated page)
     const gt = i18n.translations[locale] || i18n.translations.en;
-    
+
+    // 内联嵌入 JSZip（data URL 页面无法加载扩展资源）
+    let jszipCode = '';
+    try {
+        const resp = await fetch(chrome.runtime.getURL('jszip.min.js'));
+        jszipCode = await resp.text();
+    } catch (e) {
+        debug.warn('Failed to load JSZip for gallery:', e);
+    }
+
     return `
         <!DOCTYPE html>
         <html lang="${langAttr}">
@@ -1606,7 +1645,7 @@ function createGalleryHtml(images, pageTitle) {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>${title}</title>
-            <script src="jszip.min.js"></script>
+            <script>${jszipCode}</script>
             <style>
                 body {
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -1922,10 +1961,15 @@ function createGalleryHtml(images, pageTitle) {
                         showStatus(gt('galleryNoImagesToDownload'), 'error');
                         return;
                     }
-                    
+
+                    if (typeof JSZip === 'undefined') {
+                        showStatus(gt('galleryZipFailed'), 'error');
+                        return;
+                    }
+
                     try {
                         showStatus(gt('galleryCreatingZip'), 'info');
-                        
+
                         const zip = new JSZip();
                         const imageFolder = zip.folder('images');
                         let downloadedCount = 0;
