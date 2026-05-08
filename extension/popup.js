@@ -6,7 +6,7 @@
 // - JSZip v3.10.1 (MIT) - Copyright (c) 2009-2016 Stuart Knightley, David Duponchel, Franz Buchinger, António Afonso
 
 // Extension version - update this when releasing new versions
-const EXTENSION_VERSION = '1.6.1';
+const EXTENSION_VERSION = '1.6.2';
 
 // Debug flag - set to false to disable all console output
 const DEBUG = true; // TEMP: enable for i18n debugging
@@ -64,13 +64,14 @@ const i18n = {
 
     translations: {
         en: {
-            langAuto: '\uD83C\uDF10 Auto (Browser)',
-            langEnglish: 'English',
-            langChinese: '\u4E2D\u6587',
+            langAuto: '\uD83C\uDF10 Auto',
+            langEnglish: 'EN',
+            langChinese: 'CN',
             langLabel: 'Language:',
             headerTitle: 'Image Harvester',
             headerSubtitle: 'Quick image download on hover',
-            enableExtension: 'Enable extension',
+            enableExtension: 'On',
+            enableOff: 'Off',
             mediaDetection: 'Media detection',
             hoverDelay: 'Delay:',
             interactionSettings: 'Interaction Settings:',
@@ -80,8 +81,8 @@ const i18n = {
             posTopRight: 'Top-right',
             posTopLeft: 'Top-left',
             basicDetection: 'Basic media detection:',
-            imgTags: 'IMG tags',
-            videoElements: 'Video elements',
+            imgTags: 'IMG',
+            videoElements: 'Video',
             downloadModeLabel: 'Current download mode:',
             modeNormal: 'Normal (background)',
             modeCanvasExperimental: 'Canvas extraction (Experimental)',
@@ -89,7 +90,7 @@ const i18n = {
             experimentalHelp: 'Experimental modes for more restrictive sites. YMMV.',
             experimentalModes: '\uD83E\uDDEA Experimental download modes:',
             normalDownload: 'Normal background download',
-            canvasExtraction: 'Try canvas extraction',
+            canvasExtraction: 'Try canvas extraction (sub directories not supported)',
             advancedDetection: 'Advanced detection types:',
             svgElements: 'SVG elements',
             backgroundImages: 'Background images',
@@ -113,8 +114,8 @@ const i18n = {
             saveSubfolderHelp: 'Save images to a subfolder inside Downloads. Leave empty to save directly in Downloads.',
             baseSubfolderLabel: 'Base save directory:',
             baseSubfolderPlaceholder: 'image (optional)',
-            baseSubfolderHelp: 'A parent folder inside Downloads. All paths will be created under this directory.',
-            currentSiteLabel: 'Current site:',
+            baseSubfolderHelp: 'A parent folder inside Downloads. Sub save directories will be created under this directory.',
+            currentSiteLabel: 'Current domain:',
             excludeSiteBtn: 'Block',
             excludeSiteDone: 'Blocked',
             manageExclusions: '\uD83D\uDEAB Manage Domain Exclusions',
@@ -208,7 +209,7 @@ const i18n = {
             galleryImageAlt: 'Image {index}',
 
             // Multi-path download
-            multiPathEnableLabel: 'Multi-path download',
+            multiPathEnableLabel: 'Sub save directories',
             multiPathHelp: 'Each path shows as separate button. Normal mode only.',
             addPathBtn: '+ Add Path',
             pathNamePlaceholder: 'e.g. Photos',
@@ -221,17 +222,20 @@ const i18n = {
             statusMultiPathOff: 'Multi-path download disabled',
             statusPathAdded: 'Path added: {name} ({folder})',
             statusPathRemoved: 'Path removed',
-            statusPathEmpty: 'Name and folder cannot be empty'
+            statusPathEmpty: 'Name and folder cannot be empty',
+            tabBasic: 'General',
+            tabAdvanced: 'Advanced'
         },
 
         zh_CN: {
-            langAuto: '\uD83C\uDF10 \u81EA\u52A8\uFF08\u8DDF\u968F\u6D4F\u89C8\u5668\uFF09',
-            langEnglish: 'English',
-            langChinese: '\u4E2D\u6587',
+            langAuto: '\uD83C\uDF10 Auto',
+            langEnglish: 'EN',
+            langChinese: 'CN',
             langLabel: '\u8BED\u8A00\uFF1A',
             headerTitle: 'Image Harvester',
             headerSubtitle: '\u9F20\u6807\u60AC\u505C\u5FEB\u901F\u4E0B\u8F7D\u56FE\u7247',
-            enableExtension: '\u542F\u7528\u6269\u5C55',
+            enableExtension: '\u542F\u7528',
+            enableOff: '\u7981\u7528',
             mediaDetection: '\u5A92\u4F53\u68C0\u6D4B',
             hoverDelay: '\u60AC\u505C\u5EF6\u8FDF\uFF1A',
             interactionSettings: '\u4EA4\u4E92\u8BBE\u7F6E\uFF1A',
@@ -241,8 +245,8 @@ const i18n = {
             posTopRight: '\u53F3\u4E0A',
             posTopLeft: '\u5DE6\u4E0A',
             basicDetection: '\u57FA\u7840\u5A92\u4F53\u68C0\u6D4B\uFF1A',
-            imgTags: 'IMG \u6807\u7B7E',
-            videoElements: '\u89C6\u9891\u5143\u7D20',
+            imgTags: '\u56FE\u7247',
+            videoElements: '\u89C6\u9891',
             downloadModeLabel: '\u5F53\u524D\u4E0B\u8F7D\u6A21\u5F0F\uFF1A',
             modeNormal: '\u666E\u901A\u540E\u53F0\u4E0B\u8F7D',
             modeCanvasExperimental: 'Canvas \u63D0\u53D6\uFF08\u5B9E\u9A8C\u6027\uFF09',
@@ -250,7 +254,7 @@ const i18n = {
             experimentalHelp: '\u5BF9\u9650\u5236\u6027\u66F4\u5F3A\u7684\u7AD9\u70B9\u7684\u5B9E\u9A8C\u6A21\u5F0F\uFF0C\u6548\u679C\u56E0\u7AD9\u800C\u5F02\u3002',
             experimentalModes: '\uD83E\uDDEA \u5B9E\u9A8C\u6027\u4E0B\u8F7D\u6A21\u5F0F\uFF1A',
             normalDownload: '\u666E\u901A\u540E\u53F0\u4E0B\u8F7D',
-            canvasExtraction: '\u5C1D\u8BD5 Canvas \u63D0\u53D6',
+            canvasExtraction: '尝试 Canvas 提取（不支持子保存目录功能）',
             advancedDetection: '\u9AD8\u7EA7\u68C0\u6D4B\u7C7B\u578B\uFF1A',
             svgElements: 'SVG \u5143\u7D20',
             backgroundImages: '\u80CC\u666F\u56FE\u7247',
@@ -274,8 +278,8 @@ const i18n = {
             saveSubfolderHelp: '\u5C06\u56FE\u7247\u4FDD\u5B58\u5230 Downloads \u4E0B\u7684\u5B50\u6587\u4EF6\u5939\u3002\u7559\u7A7A\u5219\u76F4\u63A5\u4FDD\u5B58\u5230 Downloads\u3002',
             baseSubfolderLabel: '\u57FA\u7840\u4FDD\u5B58\u76EE\u5F55\uFF1A',
             baseSubfolderPlaceholder: 'image\uFF08\u53EF\u9009\uFF09',
-            baseSubfolderHelp: 'Downloads \u4E0B\u7684\u7236\u7EA7\u6587\u4EF6\u5939\uFF0C\u6240\u6709\u8DEF\u5F84\uFF08\u5B50\u76EE\u5F55\u3001\u591A\u8DEF\u5F84\uFF09\u90FD\u5728\u6B64\u76EE\u5F55\u4E0B\u521B\u5EFA\u3002',
-            currentSiteLabel: '\u5F53\u524D\u7AD9\u70B9\uFF1A',
+            baseSubfolderHelp: 'Downloads 下的父级文件夹，子保存目录在此创建。',
+            currentSiteLabel: '\u5F53\u524D\u57DF\u540D\uFF1A',
             excludeSiteBtn: '\u6392\u9664',
             excludeSiteDone: '\u5DF2\u6392\u9664',
             manageExclusions: '\uD83D\uDEAB \u7BA1\u7406\u6392\u9664\u57DF\u540D',
@@ -369,7 +373,7 @@ const i18n = {
             galleryImageAlt: '\u56FE\u7247 {index}',
 
             // Multi-path download
-            multiPathEnableLabel: '\u591A\u8DEF\u5F84\u4E0B\u8F7D',
+            multiPathEnableLabel: '子保存目录',
             multiPathHelp: '\u5404\u8DEF\u5F84\u5206\u522B\u663E\u793A\u4E3A\u72EC\u7ACB\u6309\u94AE\uFF0C\u4EC5\u666E\u901A\u4E0B\u8F7D\u6A21\u5F0F\u751F\u6548\u3002',
             addPathBtn: '+ \u65B0\u589E\u8DEF\u5F84',
             pathNamePlaceholder: '\u5982\uFF1A\u7167\u7247',
@@ -382,7 +386,9 @@ const i18n = {
             statusMultiPathOff: '\u591A\u8DEF\u5F84\u4E0B\u8F7D\u5DF2\u7981\u7528',
             statusPathAdded: '\u5DF2\u6DFB\u52A0\u8DEF\u5F84\uFF1A{name}\uFF08{folder}\uFF09',
             statusPathRemoved: '\u5DF2\u5220\u9664\u8DEF\u5F84',
-            statusPathEmpty: '\u540D\u79F0\u548C\u76EE\u5F55\u4E0D\u80FD\u4E3A\u7A7A'
+            statusPathEmpty: '\u540D\u79F0\u548C\u76EE\u5F55\u4E0D\u80FD\u4E3A\u7A7A',
+            tabBasic: '\u5E38\u89C4',
+            tabAdvanced: '\u9AD8\u7EA7'
         }
     },
 
@@ -534,6 +540,8 @@ async function initializePopup() {
         // Set toggle state
         const enabledToggle = document.getElementById('enabledToggle');
         enabledToggle.checked = enabled !== false; // Default to true
+        const enableText = document.getElementById('enableToggleText');
+        if (enableText) enableText.textContent = (enabled !== false) ? i18n.t('enableExtension') : i18n.t('enableOff');
         
         // Set delay slider
         const hoverDelay = document.getElementById('hoverDelay');
@@ -651,23 +659,42 @@ async function initializePopup() {
     }
 }
 
+// 切换到指定标签页
+function switchToTab(tabName) {
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+    const tabTrack = document.querySelector('.tab-track');
+
+    tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+    if (tabTrack) tabTrack.dataset.active = tabName;
+    tabPanes.forEach(pane => pane.classList.remove('active'));
+    const target = document.getElementById('tab-' + tabName);
+    if (target) target.classList.add('active');
+}
+
+// 初始化标签页切换
+function setupTabSwitching() {
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            switchToTab(btn.dataset.tab);
+        });
+    });
+}
+
 // Set up download mode UI
 function setupDownloadModeUI(currentMode) {
-    const advancedSettings = document.getElementById('advancedSettings');
-
-    // Set up auto-expand when experimental mode is selected
     const downloadModeRadios = document.querySelectorAll('input[name="downloadMode"]');
     downloadModeRadios.forEach(radio => {
         radio.addEventListener('change', function() {
             if (this.value !== 'normal') {
-                advancedSettings.open = true;
+                switchToTab('advanced');
             }
         });
     });
 
-    // Auto-expand if experimental mode is already selected
     if (currentMode !== 'normal') {
-        advancedSettings.open = true;
+        switchToTab('advanced');
     }
 }
 
@@ -686,6 +713,29 @@ function setupLanguageSelectorListener() {
     });
 }
 
+// 检测当前页面是否支持 content script 通信，不支持则禁用批量下载按钮
+async function checkPageAndDisableBulkButtons() {
+    const downloadAllBtn = document.getElementById('downloadAllBtn');
+    const downloadZipBtn = document.getElementById('downloadZipBtn');
+    if (!downloadAllBtn || !downloadZipBtn) return;
+
+    try {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const url = activeTab?.url || '';
+        const supported = url.startsWith('http://') || url.startsWith('https://');
+
+        if (!supported) {
+            const tip = i18n.t('statusUnsupportedPage');
+            downloadAllBtn.disabled = true;
+            downloadAllBtn.title = tip;
+            downloadZipBtn.disabled = true;
+            downloadZipBtn.title = tip;
+        }
+    } catch (e) {
+        debug.warn('Failed to check page type for bulk buttons:', e.message);
+    }
+}
+
 // Set up event listeners
 function setupEventListeners() {
     const enabledToggle = document.getElementById('enabledToggle');
@@ -693,16 +743,27 @@ function setupEventListeners() {
     const downloadAllBtn = document.getElementById('downloadAllBtn');
     const downloadZipBtn = document.getElementById('downloadZipBtn');
     const exclusionBtn = document.getElementById('exclusionBtn');
-    
+
+    // 不支持的页面禁用批量下载按钮
+    checkPageAndDisableBulkButtons();
+
+    // 更新启用 chip 文字
+    function updateEnableText(checked) {
+        const el = document.getElementById('enableToggleText');
+        if (el) el.textContent = checked ? i18n.t('enableExtension') : i18n.t('enableOff');
+    }
+
     // Toggle enabled/disabled
     enabledToggle.addEventListener('change', async (e) => {
-        const success = await storage.set('ih_enabled', e.target.checked);
+        const checked = e.target.checked;
+        const success = await storage.set('ih_enabled', checked);
         if (success) {
-            showStatus(e.target.checked ? i18n.t('statusEnabled') : i18n.t('statusDisabled'));
+            updateEnableText(checked);
+            showStatus(checked ? i18n.t('statusEnabled') : i18n.t('statusDisabled'));
             await notifyContentScriptSettingsChanged();
         } else {
             showStatus(i18n.t('statusSaveFailed'), 'error');
-            e.target.checked = !e.target.checked; // Revert
+            e.target.checked = !checked; // Revert
         }
     });
     
@@ -2164,6 +2225,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Initialize popup and event listeners
         await initializePopup();
+        setupTabSwitching();
         setupEventListeners();
         
         debug.log('[IH Popup] Initialization complete');
@@ -2222,32 +2284,36 @@ async function notifyContentScriptSettingsChanged() {
 async function setupCurrentSite() {
     const domainSpan = document.getElementById('currentSiteDomain');
     const excludeBtn = document.getElementById('excludeSiteBtn');
-    const section = document.getElementById('currentSiteSection');
+
+    function disableDomainRow(tabUrl) {
+        domainSpan.textContent = tabUrl || i18n.t('statusUnsupportedPage');
+        domainSpan.title = i18n.t('statusUnsupportedPage');
+        excludeBtn.disabled = true;
+        excludeBtn.style.opacity = '0.45';
+        excludeBtn.style.cursor = 'not-allowed';
+    }
 
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab || !tab.url) {
-            section.style.display = 'none';
+            disableDomainRow();
             return;
         }
 
         const url = new URL(tab.url);
-        // 只对 http/https 页面显示
         if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-            section.style.display = 'none';
+            disableDomainRow(tab.url);
             return;
         }
 
         const domain = url.hostname;
         domainSpan.textContent = domain;
 
-        // 点击排除/恢复按钮
         excludeBtn.addEventListener('click', async () => {
             const currentExclusions = (await storage.get('ih_domain_exclusions')) || [];
             const idx = currentExclusions.indexOf(domain);
             let ok;
             if (idx !== -1) {
-                // 已排除 → 恢复
                 currentExclusions.splice(idx, 1);
                 ok = await storage.set('ih_domain_exclusions', currentExclusions);
                 if (ok) {
@@ -2256,7 +2322,6 @@ async function setupCurrentSite() {
                     showStatus(i18n.t('statusSaved'), 'success');
                 }
             } else {
-                // 未排除 → 加入排除
                 currentExclusions.push(domain);
                 ok = await storage.set('ih_domain_exclusions', currentExclusions);
                 if (ok) {
@@ -2266,14 +2331,13 @@ async function setupCurrentSite() {
             }
         });
 
-        // 检查初始状态
         const exclusions = (await storage.get('ih_domain_exclusions')) || [];
         if (exclusions.includes(domain)) {
             markAsExcluded(excludeBtn);
         }
     } catch (error) {
-        debug.error('Failed to get current site:', error);
-        section.style.display = 'none';
+        debug.error('Failed to get current domain:', error);
+        disableDomainRow();
     }
 }
 
