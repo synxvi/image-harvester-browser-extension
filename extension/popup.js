@@ -6,7 +6,7 @@
 // - JSZip v3.10.1 (MIT) - Copyright (c) 2009-2016 Stuart Knightley, David Duponchel, Franz Buchinger, António Afonso
 
 // Extension version - update this when releasing new versions
-const EXTENSION_VERSION = '1.6.2';
+const EXTENSION_VERSION = '1.6.3';
 
 // Debug flag - set to false to disable all console output
 const DEBUG = true; // TEMP: enable for i18n debugging
@@ -914,7 +914,7 @@ function setupImageDetectionListeners() {
                     showStatus(i18n.t(msgKey));
 
                     // Lock/unlock multi-path based on mode
-                    updateMultiPathAvailability(e.target.value);
+                    updateMultiPathAvailability(e.target.value, true);
                 } else {
                     showStatus(i18n.t('statusSaveFailed'), 'error');
                     // Revert to previous selection
@@ -1225,7 +1225,8 @@ function updateAddPathButtonVisibility(paths) {
 
 // Enable or disable multi-path settings based on download mode
 // Multi-path only works in Normal mode
-function updateMultiPathAvailability(downloadMode) {
+// isModeSwitch: true when called from mode radio change, false on popup init
+function updateMultiPathAvailability(downloadMode, isModeSwitch = false) {
     const isNormal = downloadMode === 'normal';
     const multiPathCheckbox = document.getElementById('multiPathEnabled');
     const multiPathContainer = document.getElementById('multiPathContainer');
@@ -1239,8 +1240,8 @@ function updateMultiPathAvailability(downloadMode) {
             multiPathSection.style.opacity = '1';
             multiPathSection.style.pointerEvents = 'auto';
         }
-        // 如果之前配置过多路径，切回 normal 时自动勾选
-        if (!multiPathCheckbox.checked) {
+        // 只在从其他模式切回 normal 时自动恢复多路径，初始化时不强制
+        if (isModeSwitch && !multiPathCheckbox.checked) {
             storage.get('ih_multi_paths').then(paths => {
                 if (Array.isArray(paths) && paths.some(p => p.name && p.path)) {
                     multiPathCheckbox.checked = true;

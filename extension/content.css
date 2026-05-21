@@ -8,29 +8,32 @@
     left: auto;
     width: 26px;
     height: 26px;
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    border: 1.5px solid #fff;
+    background: rgba(245, 197, 24, 0.92);
+    color: #1A1A1A;
+    border: none;
     border-radius: 50%;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.15);
     transition: all 0.2s ease;
     user-select: none;
     z-index: 2147483647;
     align-items: center;
     justify-content: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
 }
 
 .ih-download-btn:hover {
-    background: rgba(0, 0, 0, 0.9);
-    transform: scale(1.1);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    background: rgba(232, 168, 23, 1);
+    transform: scale(1.12);
+    box-shadow: 0 4px 14px rgba(232, 168, 23, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
 
 .ih-download-btn:active {
     transform: scale(0.95);
+    background: rgba(212, 148, 15, 1);
 }
 
 /* ===== Multi-Path Download Toolbar ===== */
@@ -64,7 +67,7 @@
     margin-bottom: 7px;
     font-size: 11px;
     color: #fff;
-    background: rgba(0, 0, 0, 0.76);
+    background: rgba(30, 30, 30, 0.78);
     border: none;
     border-radius: 10px;
     cursor: pointer;
@@ -78,6 +81,9 @@
     max-width: 84px;
     overflow: hidden;
     text-overflow: ellipsis;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
 .ih-toolbar-btn:last-child {
@@ -85,15 +91,15 @@
 }
 
 .ih-toolbar-btn:hover {
-    background: rgba(102, 126, 234, 0.85);
-    border-color: rgba(102, 126, 234, 1);
-    transform: scale(1.12);
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    background: rgba(232, 168, 23, 0.9);
+    color: #1A1A1A;
+    transform: scale(1.08);
+    box-shadow: 0 3px 12px rgba(232, 168, 23, 0.35);
 }
 
 .ih-toolbar-btn:active {
     transform: scale(0.95);
-    background: rgba(82, 106, 194, 0.95);
+    background: rgba(212, 148, 15, 1);
 }
 
 /* ===== Download Toast Notifications ===== */
@@ -127,11 +133,12 @@
 }
 
 .ih-toast-start {
-    background: rgba(102, 126, 234, 0.65);
+    background: rgba(232, 168, 23, 0.75);
+    color: #1A1A1A;
 }
 
 .ih-toast-done {
-    background: rgba(40, 167, 69, 0.65);
+    background: rgba(40, 167, 69, 0.75);
 }
 
 .ih-toast-text {

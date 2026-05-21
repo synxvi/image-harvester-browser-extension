@@ -440,7 +440,7 @@ async function initializeExtension() {
 function createDownloadButton() {
     const button = document.createElement('div');
     button.className = 'ih-download-btn';
-    button.innerHTML = '💾';
+    button.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v12M5 12l7 7 7-7"/></svg>';
     button.title = activeStrategy ? `Save image (via ${activeStrategy.name})` : 'Save image';
 
     // 应用动态按钮大小
