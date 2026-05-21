@@ -540,8 +540,6 @@ async function initializePopup() {
         // Set toggle state
         const enabledToggle = document.getElementById('enabledToggle');
         enabledToggle.checked = enabled !== false; // Default to true
-        const enableText = document.getElementById('enableToggleText');
-        if (enableText) enableText.textContent = (enabled !== false) ? i18n.t('enableExtension') : i18n.t('enableOff');
         
         // Set delay slider
         const hoverDelay = document.getElementById('hoverDelay');
@@ -747,18 +745,11 @@ function setupEventListeners() {
     // 不支持的页面禁用批量下载按钮
     checkPageAndDisableBulkButtons();
 
-    // 更新启用 chip 文字
-    function updateEnableText(checked) {
-        const el = document.getElementById('enableToggleText');
-        if (el) el.textContent = checked ? i18n.t('enableExtension') : i18n.t('enableOff');
-    }
-
     // Toggle enabled/disabled
     enabledToggle.addEventListener('change', async (e) => {
         const checked = e.target.checked;
         const success = await storage.set('ih_enabled', checked);
         if (success) {
-            updateEnableText(checked);
             showStatus(checked ? i18n.t('statusEnabled') : i18n.t('statusDisabled'));
             await notifyContentScriptSettingsChanged();
         } else {

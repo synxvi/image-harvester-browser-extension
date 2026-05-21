@@ -37,12 +37,6 @@
                 <section class="card">
                     <div class="top-row">
                         <div class="chip-group-left">
-                            <label class="chip chip-toggle">
-                                <input type="checkbox" id="enabledToggle" checked>
-                                <span id="enableToggleText">On</span>
-                            </label>
-                        </div>
-                        <div class="chip-group-right">
                             <label class="chip">
                                 <input type="checkbox" id="detectImg" checked>
                                 <span data-i18n="imgTags">IMG</span>
@@ -50,6 +44,16 @@
                             <label class="chip">
                                 <input type="checkbox" id="detectVideo" checked>
                                 <span data-i18n="videoElements">Video</span>
+                            </label>
+                        </div>
+                        <div class="chip-group-right">
+                            <label class="capsule-toggle">
+                                <input type="checkbox" id="enabledToggle" checked>
+                                <span class="capsule-track">
+                                    <span class="capsule-off" data-i18n="enableOff">Off</span>
+                                    <span class="capsule-thumb"></span>
+                                    <span class="capsule-on" data-i18n="enableExtension">On</span>
+                                </span>
                             </label>
                         </div>
                     </div>
