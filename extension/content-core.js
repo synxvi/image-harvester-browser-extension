@@ -68,7 +68,7 @@ let contentLocale = 'en'; // 用户语言偏好，用于 toast 国际化
 let buttonSize = 26;        // 悬浮按钮大小（px）
 let toolbarSpacing = 7;     // 多路径工具栏按钮间距（px）
 let buttonPosition = 'top-right'; // 按钮弹出位置
-let borderHighlightColor = '#00ff00'; // 自定义边框颜色
+let borderHighlightColor = '#e8a817'; // 自定义边框颜色
 
 // URL 转换策略
 let urlStrategies = [];

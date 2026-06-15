@@ -91,7 +91,7 @@ async function initializePopup() {
             // 兼容旧值 gray/green → 迁移到 custom
             const colorMap = { gray: '#888888', green: '#00ff00' };
             document.getElementById('borderHighlightCustom').checked = true;
-            document.getElementById('borderHighlightColor').value = colorMap[borderMode] || '#00ff00';
+            document.getElementById('borderHighlightColor').value = colorMap[borderMode] || '#e8a817';
             await storage.set('ih_border_highlight_mode', 'custom');
             await storage.set('ih_border_highlight_color', colorMap[borderMode] || '#00ff00');
         }
@@ -804,7 +804,7 @@ function setupImageDetectionListeners() {
 }
 
 // ===== Multi-Path Save Functions =====
-const MAX_MULTI_PATHS = 6;
+const MAX_MULTI_PATHS = 10;
 
 // Render the path list from stored data
 function renderPathList(paths) {

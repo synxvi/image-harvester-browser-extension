@@ -74,7 +74,7 @@ async function initializeExtension() {
         buttonPosition = buttonPositionSetting || 'top-right';
 
         // 视觉反馈自定义颜色
-        borderHighlightColor = (await storage.get('ih_border_highlight_color')) || '#00ff00';
+        borderHighlightColor = (await storage.get('ih_border_highlight_color')) || '#e8a817';
         // 兼容旧值 gray/green → 迁移到 custom
         if (borderHighlightMode === 'gray') {
             borderHighlightColor = '#888888';
@@ -181,7 +181,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             storage.get('ih_toolbar_spacing').then(val => { toolbarSpacing = val || 7; });
             storage.get('ih_button_position').then(val => { buttonPosition = val || 'top-right'; });
             storage.get('ih_border_highlight_color').then(val => {
-                borderHighlightColor = val || '#00ff00';
+                borderHighlightColor = val || '#e8a817';
                 // 重新注入 CSS 以应用新颜色
                 if (borderHighlightMode !== 'off') {
                     const existingStyle = document.getElementById('ih-border-styles');
