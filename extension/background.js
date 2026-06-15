@@ -169,10 +169,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
         const disabled = !changes.ih_enabled.newValue;
         debug.log('Extension enabled status changed:', !disabled);
         
-        // Update badge for all tabs
+        // Update badge for all tabs with proper exclusion check
         chrome.tabs.query({}, (tabs) => {
             tabs.forEach(tab => {
-                updateBadge(disabled, false, tab.id);
+                updateBadgeForTab(tab.id, tab.url);
             });
         });
     }
@@ -283,15 +283,33 @@ async function downloadImage(url, filename, downloadMode = 'normal', pathIndex =
         // Clean filename - remove any potentially problematic characters
         const cleanFilename = filename.replace(/[<>:"/\\|?*]/g, '_');
 
-        let downloadUrl = url;
+        // 优先通过 background 的 fetch 下载（DNR 规则生效且无 CORS 限制）
+        // 这对依赖 Referer 验证的站点（如 Pixiv）至关重要
+        try {
+            const response = await fetch(url);
+            if (response.ok) {
+                const blob = await response.blob();
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    if (reader.result) {
+                        downloadCanvasImage(reader.result, cleanFilename, pathIndex, tabId);
+                    }
+                };
+                reader.readAsDataURL(blob);
+                debug.log(`Image fetched via background and downloaded: ${cleanFilename}`);
+                return;
+            }
+        } catch (fetchError) {
+            debug.log('Background fetch failed, falling back to direct download:', fetchError.message);
+        }
 
+        // Fallback: direct chrome.downloads.download
         const downloadId = await chrome.downloads.download({
             url: url,
             filename: await buildDownloadPath(cleanFilename, pathIndex),
-            saveAs: false // Save to default downloads folder without dialog
+            saveAs: false
         });
 
-        // 记录映射，用于下载完成后通知页面
         if (tabId) downloadTabMap.set(downloadId, tabId);
 
         debug.log(`Image download started: ${cleanFilename} (ID: ${downloadId}) - Mode: ${downloadMode} - PathIndex: ${pathIndex}`);

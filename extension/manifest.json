@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "1.6.3",
+  "version": "1.6.5",
   "default_locale": "en",
   "description": "__MSG_extDescription__",
   "permissions": [
@@ -25,7 +25,15 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": [
+        "naming.js",
+        "content-core.js",
+        "content-strategies.js",
+        "content-image-processing.js",
+        "content-download.js",
+        "content-ui.js",
+        "content.js"
+      ],
       "css": ["content.css"],
       "run_at": "document_end",
       "all_frames": true

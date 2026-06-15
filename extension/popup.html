@@ -93,17 +93,17 @@
                     </div>
                     <div class="interaction-control">
                         <span class="interaction-label" data-i18n="buttonSize">Button size:</span>
-                        <input type="range" id="buttonSize" min="20" max="30" step="2" value="26">
+                        <input type="range" id="buttonSize" min="20" max="32" step="2" value="26">
                         <span id="buttonSizeValue" class="interaction-value">26px</span>
                     </div>
                     <div class="interaction-control">
                         <span class="interaction-label" data-i18n="toolbarSpacing">Btn gap:</span>
-                        <input type="range" id="toolbarSpacing" min="2" max="10" step="1" value="7">
+                        <input type="range" id="toolbarSpacing" min="2" max="12" step="1" value="7">
                         <span id="toolbarSpacingValue" class="interaction-value">7px</span>
                     </div>
                     <div class="interaction-control">
                         <span class="interaction-label" data-i18n="hoverDelay">Delay:</span>
-                        <input type="range" id="hoverDelay" min="500" max="2000" step="100" value="1000">
+                        <input type="range" id="hoverDelay" min="300" max="1700" step="100" value="1000">
                         <span id="delayValue" class="interaction-value">1.0s</span>
                     </div>
                 </section>
@@ -133,6 +133,51 @@
 
             <!-- ====== 高级设置 ====== -->
             <div class="tab-pane" id="tab-advanced">
+                <!-- 视觉反馈 -->
+                <section class="card">
+                    <div class="card-title" data-i18n="visualFeedback">Visual feedback</div>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="borderHighlight" id="borderHighlightOff" value="off" checked>
+                            <span data-i18n="noBorder">No border highlighting</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="borderHighlight" id="borderHighlightCustom" value="custom">
+                            <span data-i18n="customBorderColor">Custom border color</span>
+                            <input type="color" id="borderHighlightColor" value="#00ff00" class="border-color-picker">
+                        </label>
+                    </div>
+                    <p class="help-text" data-i18n="visualFeedbackHelp">Show border around images when hovering</p>
+                    <div class="card-divider"></div>
+                    <div class="interaction-control">
+                        <span class="interaction-label" data-i18n="glowDelayLabel">Glow delay:</span>
+                        <input type="range" id="glowDelay" min="0" max="2000" step="100" value="500">
+                        <span id="glowDelayValue" class="interaction-value">0.5s</span>
+                    </div>
+                </section>
+
+                <!-- 图片重命名 -->
+                <section class="card">
+                    <label class="card-title" for="filenameTemplate" data-i18n="filenameTemplateLabel">Image Rename</label>
+                    <input type="text" id="filenameTemplate" placeholder="{site}_{datetime}{ext}">
+                    <div class="placeholder-chips" id="templatePlaceholderChips">
+                        <button type="button" class="placeholder-chip" data-ph="{site}">{site}</button>
+                        <button type="button" class="placeholder-chip" data-ph="{title}">{title}</button>
+                        <button type="button" class="placeholder-chip" data-ph="{date}">{date}</button>
+                        <button type="button" class="placeholder-chip" data-ph="{datetime}">{datetime}</button>
+                        <button type="button" class="placeholder-chip" data-ph="{filename}">{filename}</button>
+                        <button type="button" class="placeholder-chip" data-ph="{ext}">{ext}</button>
+                    </div>
+                    <div class="placeholder-chips" id="separatorChips">
+                        <span class="chip-label" data-i18n="separatorLabel">Separators:</span>
+                        <button type="button" class="placeholder-chip separator-chip" data-sep="_">_</button>
+                        <button type="button" class="placeholder-chip separator-chip" data-sep="-">-</button>
+                        <button type="button" class="placeholder-chip separator-chip" data-sep=".">.</button>
+                        <button type="button" class="placeholder-chip separator-chip" data-sep=" " data-i18n="separatorSpace">space</button>
+                    </div>
+                    <p class="help-text" data-i18n="filenameTemplateHelp">Empty = use default naming. Leave it blank to disable.</p>
+                </section>
+
                 <!-- 下载模式 -->
                 <section class="card">
                     <div class="card-title" data-i18n="experimentalModes">Experimental download modes</div>
@@ -149,6 +194,17 @@
                     </div>
                 </section>
 
+                <!-- 文件过滤 + 最小尺寸 -->
+                <section class="card">
+                    <div class="card-title" data-i18n="allowedExtensions">Allowed file extensions</div>
+                    <input type="text" id="allowedExtensions">
+                    <p class="help-text" data-i18n="allowedExtensionsHelp">Comma-separated list of allowed file extensions</p>
+                    <div class="card-divider"></div>
+                    <div class="card-title" data-i18n="minImageSize">Minimum image size (px)</div>
+                    <input type="number" id="minImageSize" min="50" max="1000" value="100">
+                    <p class="help-text" data-i18n="minImageSizeHelp">Minimum width/height for images to be detected (50-1000px)</p>
+                </section>
+
                 <!-- 高级检测 -->
                 <section class="card">
                     <div class="card-title" data-i18n="advancedDetection">Advanced detection types</div>
@@ -163,34 +219,6 @@
                         </label>
                     </div>
                     <p class="help-text" data-i18n="advancedDetectionHelp">Advanced detection modes (disabled by default)</p>
-                </section>
-
-                <!-- 视觉反馈 -->
-                <section class="card">
-                    <div class="card-title" data-i18n="visualFeedback">Visual feedback</div>
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="borderHighlight" id="borderHighlightOff" value="off" checked>
-                            <span data-i18n="noBorder">No border highlighting</span>
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="borderHighlight" id="borderHighlightCustom" value="custom">
-                            <span data-i18n="customBorderColor">Custom border color</span>
-                            <input type="color" id="borderHighlightColor" value="#00ff00" class="border-color-picker">
-                        </label>
-                    </div>
-                    <p class="help-text" data-i18n="visualFeedbackHelp">Show border around images when hovering</p>
-                </section>
-
-                <!-- 文件过滤 + 最小尺寸 -->
-                <section class="card">
-                    <div class="card-title" data-i18n="allowedExtensions">Allowed file extensions</div>
-                    <input type="text" id="allowedExtensions">
-                    <p class="help-text" data-i18n="allowedExtensionsHelp">Comma-separated list of allowed file extensions</p>
-                    <div class="card-divider"></div>
-                    <div class="card-title" data-i18n="minImageSize">Minimum image size (px)</div>
-                    <input type="number" id="minImageSize" min="50" max="1000" value="100">
-                    <p class="help-text" data-i18n="minImageSizeHelp">Minimum width/height for images to be detected (50-1000px)</p>
                 </section>
 
                 <!-- 格式转换 + 延迟 -->
@@ -230,6 +258,9 @@
 
     <!-- JSZip v3.10.1 - MIT License - https://github.com/Stuk/jszip/ -->
     <script src="jszip.min.js"></script>
+    <script src="naming.js"></script>
+    <script src="popup-config.js"></script>
+    <script src="popup-i18n.js"></script>
     <script src="popup.js"></script>
 </body>
 </html>

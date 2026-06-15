@@ -825,3 +825,56 @@ footer {
     font-size: 11px;
     color: var(--text-muted);
 }
+
+/* === 命名模板 === */
+.placeholder-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 6px 0 2px;
+}
+.placeholder-chip {
+    font-size: 11px;
+    padding: 2px 7px;
+    background: var(--surface);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.placeholder-chip:hover {
+    background: var(--accent);
+    color: #1A1A1A;
+    border-color: var(--accent);
+}
+.placeholder-chip.chip-used,
+.placeholder-chip:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.chip-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-right: 2px;
+    align-self: center;
+}
+.separator-chip {
+    min-width: 24px;
+    text-align: center;
+}
+.separator-chip.chip-active {
+    background: var(--accent);
+    color: #1A1A1A;
+    font-weight: 600;
+}
+.template-preview {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    background: var(--surface);
+    padding: 1px 6px;
+    border-radius: 4px;
+    word-break: break-all;
+}
