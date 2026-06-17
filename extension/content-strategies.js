@@ -107,7 +107,9 @@ function hexToRgb(hex) {
     return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
 }
 
-// Generate CSS for border highlighting (pulsing glow animation)
+// Generate CSS for halo overlay（方案 B：position:fixed 浮层）
+// 关键：浮层挂在 document.body 顶层，光晕向外发散不受任何祖先 overflow:hidden 裁剪。
+// 浮层自身 pointer-events:none，不挡鼠标事件；z-index 略低于下载按钮(2147483647)。
 function generateBorderCSS() {
     const { r, g, b } = hexToRgb(borderHighlightColor);
     return `
@@ -115,37 +117,143 @@ function generateBorderCSS() {
     0%, 100% { box-shadow: 0 0 3px 1px rgba(${r},${g},${b},0.15), 0 0 0 0 rgba(${r},${g},${b},0.3); }
     50%      { box-shadow: 0 0 8px 3px rgba(${r},${g},${b},0.6), 0 0 0 1px rgba(${r},${g},${b},0.4); }
 }
-.ih-border-highlight-custom {
-    outline: none !important;
+.ih-halo-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    pointer-events: none;        /* 不挡 hover/click 事件，让 handleMouseEnter 正常触发 */
+    border-radius: 0;            /* 大小/圆角由 JS 跟随目标计算 */
+    z-index: 2147483646;         /* 仅低于下载按钮(2147483647)，高于页面其他元素 */
     animation: ih-glow-pulse 1.5s ease-in-out infinite;
+    box-sizing: border-box;
 }
 `;
 }
 
-// Inject border CSS
+// Inject border CSS（注入 <style> 节点，颜色变化时复用同一节点重写 textContent）
 function injectBorderCSS() {
-    if (!document.getElementById('ih-border-styles')) {
-        const style = document.createElement('style');
+    let style = document.getElementById('ih-border-styles');
+    if (!style) {
+        style = document.createElement('style');
         style.id = 'ih-border-styles';
-        style.textContent = generateBorderCSS();
         document.head.appendChild(style);
+    }
+    style.textContent = generateBorderCSS();
+}
+
+// 将 halo 浮层对齐到目标元素的当前视口位置
+function positionHaloOverlay() {
+    if (!haloOverlay || !haloTarget) return;
+    const rect = haloTarget.getBoundingClientRect();
+    // 目标不可见/尺寸过小则隐藏 halo，避免空浮层发光
+    if (rect.width < 2 || rect.height < 2) {
+        haloOverlay.style.display = 'none';
+        return;
+    }
+    haloOverlay.style.display = 'block';
+    haloOverlay.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
+    haloOverlay.style.width = rect.width + 'px';
+    haloOverlay.style.height = rect.height + 'px';
+    // 圆角跟随目标元素的 computed border-radius（含百分比/简写），
+    // 保证方形图就是方形光晕、圆角图就是圆角光晕。
+    // 注意：不能凭宽高算半径，否则方形小图会被误判为完整圆形（直径=边长）。
+    try {
+        const cs = window.getComputedStyle(haloTarget);
+        haloOverlay.style.borderRadius = cs.borderRadius || '0px';
+    } catch (e) {
+        haloOverlay.style.borderRadius = '0px';
     }
 }
 
-// Add/remove border highlight
-function toggleBorderHighlight(element, show) {
-    if (borderHighlightMode === 'off') return;
+// 为 halo 目标挂载跟随观察器（尺寸/属性/滚动/缩放）
+function attachHaloObservers(target) {
+    detachHaloObservers();
 
-    // Check if element exists and has classList
-    if (!element || !element.classList) return;
+    haloResizeObserver = new ResizeObserver(() => positionHaloOverlay());
+    haloResizeObserver.observe(target);
 
-    // Remove any existing border classes
-    const classesToRemove = Array.from(element.classList).filter(cls => cls.startsWith('ih-border-highlight-'));
-    element.classList.remove(...classesToRemove);
+    haloMutationObserver = new MutationObserver(() => {
+        positionHaloOverlay();
+        // 属性变更（如 src 切换）后下一帧再校准一次，捕获布局重排后的位置
+        requestAnimationFrame(positionHaloOverlay);
+    });
+    haloMutationObserver.observe(target, { attributes: true, attributeFilter: ['src', 'class', 'style'] });
 
-    if (show) {
-        element.classList.add('ih-border-highlight-custom');
+    // 滚动用 capture 阶段：任何嵌套滚动容器滚动都能同步重定位，无需逐个绑定
+    haloScrollHandler = () => positionHaloOverlay();
+    window.addEventListener('scroll', haloScrollHandler, true);
+    haloResizeHandler = () => positionHaloOverlay();
+    window.addEventListener('resize', haloResizeHandler);
+}
+
+// 卸载 halo 观察器（不销毁浮层本身）
+function detachHaloObservers() {
+    if (haloResizeObserver) {
+        haloResizeObserver.disconnect();
+        haloResizeObserver = null;
     }
+    if (haloMutationObserver) {
+        haloMutationObserver.disconnect();
+        haloMutationObserver = null;
+    }
+    if (haloScrollHandler) {
+        window.removeEventListener('scroll', haloScrollHandler, true);
+        haloScrollHandler = null;
+    }
+    if (haloResizeHandler) {
+        window.removeEventListener('resize', haloResizeHandler);
+        haloResizeHandler = null;
+    }
+}
+
+// 完全销毁 halo 浮层（DOM + 观察器 + 目标引用）
+function destroyHaloOverlay() {
+    detachHaloObservers();
+    if (haloOverlay && haloOverlay.parentNode) {
+        haloOverlay.parentNode.removeChild(haloOverlay);
+    }
+    haloOverlay = null;
+    haloTarget = null;
+}
+
+// Add/remove halo overlay（替代旧的给元素加 class 方案）
+// 接口签名与旧实现保持一致，content.js 调用点无需改动。
+function toggleBorderHighlight(element, show) {
+    if (borderHighlightMode === 'off') {
+        destroyHaloOverlay();
+        return;
+    }
+    if (!element || !element.getBoundingClientRect) return;
+
+    if (!show) {
+        destroyHaloOverlay();
+        return;
+    }
+
+    // 同一目标：仅复定位即可，避免动画重启闪烁
+    if (haloTarget === element && haloOverlay && haloOverlay.parentNode) {
+        positionHaloOverlay();
+        return;
+    }
+
+    // 切换到新目标：先销毁旧的，保证任意时刻至多一个 halo
+    destroyHaloOverlay();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'ih-halo-overlay';
+    // body 直接子节点 → 不受任何祖先 overflow 裁剪
+    document.body.appendChild(overlay);
+
+    haloOverlay = overlay;
+    haloTarget = element;
+    positionHaloOverlay();
+    attachHaloObservers(element);
 }
 
 // 查找匹配指定域名或 URL 的转换策略

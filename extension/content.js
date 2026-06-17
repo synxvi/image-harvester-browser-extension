@@ -57,7 +57,7 @@ async function initializeExtension() {
         glowDelay = glowDelaySetting != null ? glowDelaySetting : CONFIG.DEFAULT_GLOW_DELAY;
         minImageSize = minSize || CONFIG.MIN_IMAGE_SIZE;
         detectImg = imgDetect !== false; // Default: true
-        detectVideo = videoDetect !== false; // Default: true
+        detectVideo = videoDetect === true; // Default: false
         borderHighlightMode = borderHighlight || CONFIG.DEFAULT_BORDER_HIGHLIGHT;
         detectSvg = svgDetect === true; // Default: false
         detectBackground = bgDetect === true; // Default: false
@@ -74,7 +74,7 @@ async function initializeExtension() {
         buttonPosition = buttonPositionSetting || 'top-right';
 
         // 视觉反馈自定义颜色
-        borderHighlightColor = (await storage.get('ih_border_highlight_color')) || '#e8a817';
+        borderHighlightColor = (await storage.get('ih_border_highlight_color')) || '#e6a100';
         // 兼容旧值 gray/green → 迁移到 custom
         if (borderHighlightMode === 'gray') {
             borderHighlightColor = '#888888';
@@ -165,14 +165,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 if (borderHighlightMode !== 'off') {
                     injectBorderCSS();
                 } else {
-                    // Remove all existing border highlights with proper checks
-                    document.querySelectorAll('[class*="ih-border-highlight-"]').forEach(el => {
-                        if (el && el.classList) {
-                            // Remove all classes that start with 'ih-border-highlight-'
-                            const classesToRemove = Array.from(el.classList).filter(cls => cls.startsWith('ih-border-highlight-'));
-                            el.classList.remove(...classesToRemove);
-                        }
-                    });
+                    // 关闭模式：销毁当前 halo 浮层（方案 B）
+                    destroyHaloOverlay();
                 }
             }
 
@@ -181,7 +175,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             storage.get('ih_toolbar_spacing').then(val => { toolbarSpacing = val || 7; });
             storage.get('ih_button_position').then(val => { buttonPosition = val || 'top-right'; });
             storage.get('ih_border_highlight_color').then(val => {
-                borderHighlightColor = val || '#e8a817';
+                borderHighlightColor = val || '#e6a100';
                 // 重新注入 CSS 以应用新颜色
                 if (borderHighlightMode !== 'off') {
                     const existingStyle = document.getElementById('ih-border-styles');

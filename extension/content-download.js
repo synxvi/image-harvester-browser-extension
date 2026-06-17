@@ -168,26 +168,50 @@ async function downloadElement(element, pathIndex = -1) {
             const downloadMode = result.ih_download_mode || 'normal';
 
             // Helper to download a blob locally
+            // 通过 background 的 download_canvas_image 统一下载，而非 <a download>。
+            // 原因：<a download> 只能写到浏览器下载根目录，无法携带 pathIndex，
+            // 会导致基础保存目录/子保存目录对 WebP→PNG、canvas 提取的场景全部失效。
+            // 走 background 才能让 buildDownloadPath() 拼接出正确的子目录路径。
             const downloadBlob = (blob, finalFilename) => {
-                const objectUrl = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = objectUrl;
-                a.download = finalFilename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-
-                if (activeButton && activeButton.parentNode) {
-                    activeButton.innerHTML = '✅';
-                    setTimeout(() => {
-                        if (activeButton && activeButton.parentNode) {
-                            activeButton.innerHTML = activeButtonHtml;
-                            activeButton.title = 'Save image';
-                        }
-                    }, 2000);
-                }
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    chrome.runtime.sendMessage({
+                        type: 'download_canvas_image',
+                        dataUrl: reader.result,
+                        filename: finalFilename,
+                        pathIndex: pathIndex
+                    }).catch(() => {});
+                    if (activeButton && activeButton.parentNode) {
+                        activeButton.innerHTML = '✅';
+                        setTimeout(() => {
+                            if (activeButton && activeButton.parentNode) {
+                                activeButton.innerHTML = activeButtonHtml;
+                                activeButton.title = 'Save image';
+                            }
+                        }, 2000);
+                    }
+                };
+                reader.readAsDataURL(blob);
             };
+
+            // === CANVAS 模式优先：canvas 模式意图是"强制 canvas 重编码"（绕过限制性站点、
+            // 统一转 PNG、丢 EXIF），与 fast path 的"保留原始格式"目的相反。
+            // 原实现把 canvas 提取放在 fast path 之后，导致 fast path 成功即 return，
+            // canvas 模式被架空、名不副实（下载到的还是原图原样）。
+            // 现将 canvas 提取提前：canvas 模式下先走提取，失败再回退到 fast path 等。
+            if (downloadMode === 'canvas') {
+                try {
+                    const canvasBlob = await extractImageToCanvas(element);
+                    if (canvasBlob) {
+                        debug.log('Canvas extraction succeeded, downloading re-encoded blob');
+                        downloadBlob(canvasBlob, filename);
+                        return;
+                    }
+                    debug.warn('Canvas extraction returned empty, falling back to fast path');
+                } catch (e) {
+                    debug.warn('Canvas extraction failed, falling back to fast path', e);
+                }
+            }
 
             // === FAST PATH: Try fetch first to preserve original format ===
             // This gets the image in its original format (JPEG stays JPEG, GIF keeps animation, EXIF preserved)
@@ -221,6 +245,28 @@ async function downloadElement(element, pathIndex = -1) {
                             }
 
                             debug.log('Fast path success: got blob', fetchedBlob.type, 'size:', fetchedBlob.size, 'as', fastFilename);
+
+                            // WebP→PNG 转换必须在此处拦截：fast path 成功后会 return，
+                            // 若不在此拦截，下方第 258 行的转换逻辑永远到不了，开关形同虚设。
+                            if (convertWebpToPng &&
+                                (contentType === 'image/webp' ||
+                                 elementUrl.toLowerCase().includes('.webp') ||
+                                 elementUrl.toLowerCase().includes('webp'))) {
+                                debug.log('WebP detected and conversion enabled (fast path)');
+                                try {
+                                    const pngBlob = await convertWebpImageToPng(element);
+                                    if (pngBlob) {
+                                        let pngFilename = fastFilename.replace(/\.(webp|WEBP)$/i, '.png');
+                                        if (!pngFilename.endsWith('.png')) {
+                                            pngFilename = pngFilename.replace(/\.[^.]+$/, '.png');
+                                        }
+                                        downloadBlob(pngBlob, pngFilename);
+                                        return;
+                                    }
+                                } catch (e) {
+                                    debug.warn('WebP conversion failed (fast path), falling back to original webp', e);
+                                }
+                            }
 
                             // Send blob to background script for download with correct path
                             // (background uses chrome.downloads.download which respects configured subfolder/pathIndex)
@@ -274,19 +320,6 @@ async function downloadElement(element, pathIndex = -1) {
                 }
             }
 
-            // Handle canvas extraction mode
-            if (downloadMode === 'canvas') {
-                try {
-                    const canvasBlob = await extractImageToCanvas(element);
-                    if (canvasBlob) {
-                        downloadBlob(canvasBlob, filename);
-                        return;
-                    }
-                } catch (e) {
-                    debug.warn('Canvas extraction failed, falling back', e);
-                }
-            }
-
             // Final fallback: Normal background download
             chrome.runtime.sendMessage({
                 type: 'download_image',
@@ -337,7 +370,7 @@ function getAllImages(settings = {}) {
     const detectImgLocal = settings.detectImg !== false; // Default: true
     const detectSvgLocal = settings.detectSvg === true; // Default: false
     const detectBackgroundLocal = settings.detectBackground === true; // Default: false
-    const detectVideoLocal = settings.detectVideo !== false; // Default: true
+    const detectVideoLocal = settings.detectVideo === true; // Default: false
     const allowedExtensions = settings.allowedExtensions || CONFIG.DEFAULT_EXTENSIONS;
 
     // Helper function to check if URL has allowed extension

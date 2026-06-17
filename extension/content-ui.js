@@ -182,16 +182,19 @@ function showDownloadButton(img) {
         return;
     }
 
-    // Destroy old button/toolbar only when switching to a different image or first show
-    hideDownloadButton();
+    // Destroy old button/toolbar only when switching to a different image or first show.
+    // 传入新图作为 halo 保留目标：切图时 halo 可能已亮在新图上（glow 500ms < hover 1000ms），
+    // 不能误清；其余调用方不传此参数，按钮销毁即同步清理 halo，避免浮层泄漏。
+    hideDownloadButton(img);
 
     const activePaths = multiPaths.filter(p => p.enabled !== false);
 
     // Decide: toolbar or single button?
-    // Conditions: multi-path enabled + Normal mode + at least 2 active paths
+    // Conditions: multi-path enabled + at least 2 active paths.
+    // 不再限制下载模式：canvas 提取已统一走 background 的 download_canvas_image，
+    // 与 normal 模式共用 buildDownloadPath() 路径逻辑，多路径对两种模式同样生效。
     const useToolbar = (
         multiPathEnabled &&
-        currentDownloadMode === 'normal' &&
         activePaths.length >= 2
     );
 
@@ -211,8 +214,13 @@ function showDownloadButton(img) {
 }
 
 // Hide download button/toolbar
-function hideDownloadButton() {
+// preserveHaloTarget: 若 halo 当前正指向该目标则保留（用于 showDownloadButton 切图场景），
+//                     其余场景不传 → 按钮销毁时同步清理 halo，防止浮层在图片被移除/隐藏后残留发光。
+function hideDownloadButton(preserveHaloTarget) {
     detachImageObservers();
+    if (!(preserveHaloTarget && haloTarget === preserveHaloTarget)) {
+        destroyHaloOverlay();
+    }
     if (downloadButton) {
         // Remove from DOM to prevent leaks when switching between button and toolbar
         if (downloadButton.parentNode) {

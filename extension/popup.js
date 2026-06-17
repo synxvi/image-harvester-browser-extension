@@ -79,7 +79,7 @@ async function initializePopup() {
         document.getElementById('detectImg').checked = detectImg !== false;
         document.getElementById('detectSvg').checked = detectSvg === true; // Disabled by default
         document.getElementById('detectBackground').checked = detectBackground === true; // Disabled by default
-        document.getElementById('detectVideo').checked = detectVideo !== false;
+        document.getElementById('detectVideo').checked = detectVideo === true; // Disabled by default
         
         // Set border highlighting radio buttons
         const borderMode = borderHighlightMode || CONFIG.DEFAULT_BORDER_HIGHLIGHT;
@@ -91,9 +91,9 @@ async function initializePopup() {
             // 兼容旧值 gray/green → 迁移到 custom
             const colorMap = { gray: '#888888', green: '#00ff00' };
             document.getElementById('borderHighlightCustom').checked = true;
-            document.getElementById('borderHighlightColor').value = colorMap[borderMode] || '#e8a817';
+            document.getElementById('borderHighlightColor').value = colorMap[borderMode] || '#e6a100';
             await storage.set('ih_border_highlight_mode', 'custom');
-            await storage.set('ih_border_highlight_color', colorMap[borderMode] || '#00ff00');
+            await storage.set('ih_border_highlight_color', colorMap[borderMode] || '#e6a100');
         }
         // 加载已保存的自定义颜色
         const borderColor = await storage.get('ih_border_highlight_color');
@@ -498,12 +498,33 @@ function setupImageDetectionListeners() {
     });
 
             // 兼容旧值 gray/green → 迁移到 custom
-    document.getElementById('borderHighlightColor').addEventListener('input', async (e) => {
-        document.getElementById('borderHighlightCustom').checked = true;
+    // 用 input 事件保证拖动选色板时即时生效，但加 trailing 节流：拖动期间不写 storage，
+    // 停顿 250ms 后只写一次。否则 input 每帧触发会让 chrome.storage.sync 写入风暴，
+    // 撞上 MAX_WRITE_OPERATIONS 配额，导致后续（如关子保存目录）的 set 抛错报"保存设置失败"。
+    // 不能改用纯 change：<input type="color"> 在 popup 关闭卸载时可能不派发 change，
+    // 会导致"改完颜色关面板"颜色不生效。
+    let colorWriteTimer = null;
+    let pendingColorValue = null;
+    const flushColorWrite = async () => {
+        if (colorWriteTimer) {
+            clearTimeout(colorWriteTimer);
+            colorWriteTimer = null;
+        }
+        if (pendingColorValue == null) return;
+        const v = pendingColorValue;
+        pendingColorValue = null;
         await storage.set('ih_border_highlight_mode', 'custom');
-        await storage.set('ih_border_highlight_color', e.target.value);
-        await notifyContentScriptSettingsChanged();
+        await storage.set('ih_border_highlight_color', v);
+        notifyContentScriptSettingsChanged().catch(() => {});
+    };
+    document.getElementById('borderHighlightColor').addEventListener('input', (e) => {
+        document.getElementById('borderHighlightCustom').checked = true;
+        pendingColorValue = e.target.value;
+        if (colorWriteTimer) clearTimeout(colorWriteTimer);
+        colorWriteTimer = setTimeout(flushColorWrite, 250);
     });
+    // 兜底：popup 关闭（pagehide）时若有未写的颜色，立即同步写掉，避免丢写。
+    window.addEventListener('pagehide', flushColorWrite);
     
     // Minimum image size input
     const minImageSize = document.getElementById('minImageSize');
@@ -991,45 +1012,22 @@ function updateAddPathButtonVisibility(paths) {
 // Multi-path only works in Normal mode
 // isModeSwitch: true when called from mode radio change, false on popup init
 function updateMultiPathAvailability(downloadMode, isModeSwitch = false) {
-    const isNormal = downloadMode === 'normal';
     const multiPathCheckbox = document.getElementById('multiPathEnabled');
     const multiPathContainer = document.getElementById('multiPathContainer');
     const multiPathSection = document.querySelector('.multi-path-section');
 
     if (!multiPathCheckbox) return;
 
-    if (isNormal) {
-        multiPathCheckbox.disabled = false;
-        if (multiPathSection) {
-            multiPathSection.style.opacity = '1';
-            multiPathSection.style.pointerEvents = 'auto';
-        }
-        // 只在从其他模式切回 normal 时自动恢复多路径，初始化时不强制
-        if (isModeSwitch && !multiPathCheckbox.checked) {
-            storage.get('ih_multi_paths').then(paths => {
-                if (Array.isArray(paths) && paths.some(p => p.name && p.path)) {
-                    multiPathCheckbox.checked = true;
-                    multiPathContainer.classList.remove('hidden-container');
-                    storage.set('ih_multi_path_enabled', true).catch(() => {});
-                }
-            });
-        }
+    // 子保存目录不再受下载模式限制：canvas 提取已统一走 background 的
+    // download_canvas_image，与 normal 模式共用 buildDownloadPath() 路径逻辑，
+    // 基础目录/子目录对两种模式同样生效。这里只管 UI 显隐，不再禁用。
+    multiPathCheckbox.disabled = false;
+    if (multiPathSection) {
+        multiPathSection.style.opacity = '1';
+        multiPathSection.style.pointerEvents = 'auto';
+    }
+    if (multiPathContainer) {
         multiPathContainer.classList.toggle('hidden-container', !multiPathCheckbox.checked);
-    } else {
-        // Disable: lock checkbox, hide container, show visual hint
-        if (multiPathCheckbox.checked) {
-            multiPathCheckbox.checked = false;
-            storage.set('ih_multi_path_enabled', false).catch(() => {});
-            multiPathContainer.classList.add('hidden-container');
-        }
-        multiPathCheckbox.disabled = true;
-        if (multiPathContainer) {
-            multiPathContainer.classList.add('hidden-container');
-        }
-        if (multiPathSection) {
-            multiPathSection.style.opacity = '0.5';
-            multiPathSection.style.pointerEvents = 'none';
-        }
     }
 }
 
@@ -1088,7 +1086,7 @@ async function getCurrentSettings() {
             detectImg: detectImg !== false, // Default: true
             detectSvg: detectSvg === true, // Default: false
             detectBackground: detectBackground === true, // Default: false
-            detectVideo: detectVideo !== false, // Default: true
+            detectVideo: detectVideo === true, // Default: false
             convertWebpToPng: convertWebpToPng === true, // Default: false
             longHideDelay: longHideDelay === true, // Default: false
             hoverDelay: hoverDelaySetting || CONFIG.DEFAULT_HOVER_DELAY,
@@ -1107,7 +1105,7 @@ async function getCurrentSettings() {
             detectImg: true,
             detectSvg: false, // Changed default
             detectBackground: false, // Changed default
-            detectVideo: true,
+            detectVideo: false,
             convertWebpToPng: false, // Default: false
             minImageSize: CONFIG.MIN_IMAGE_SIZE,
             allowedExtensions: CONFIG.DEFAULT_EXTENSIONS

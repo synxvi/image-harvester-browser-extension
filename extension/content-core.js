@@ -46,7 +46,7 @@ let minImageSize = CONFIG.MIN_IMAGE_SIZE;
 let detectImg = true;
 let borderHighlightMode = CONFIG.DEFAULT_BORDER_HIGHLIGHT;
 let glowDelay = CONFIG.DEFAULT_GLOW_DELAY;
-let detectVideo = true;
+let detectVideo = false;
 let detectSvg = false;
 let detectBackground = false;
 let convertWebpToPng = false;
@@ -58,6 +58,15 @@ let hideTimer = null; // Tracks the pending hide timer so re-enter can cancel it
 let imageResizeObserver = null;   // ResizeObserver：跟踪当前图片尺寸变化
 let imageMutationObserver = null; // MutationObserver：跟踪当前图片 src 属性变化
 
+// Halo overlay state（视觉反馈独立浮层，方案 B）
+// 把光晕画在 body 顶层的 position:fixed 浮层上，避免被父级 overflow:hidden 裁剪
+let haloOverlay = null;            // 当前 halo DOM 节点（.ih-halo-overlay）
+let haloTarget = null;             // halo 当前跟随的目标元素
+let haloResizeObserver = null;     // 监听目标尺寸变化，同步 halo 大小
+let haloMutationObserver = null;   // 监听目标 src/属性变化，同步 halo 大小
+let haloScrollHandler = null;      // 滚动时重定位（capture 阶段，捕获所有滚动容器）
+let haloResizeHandler = null;      // 窗口尺寸变化时重定位
+
 // Multi-path download settings
 let multiPathEnabled = false;
 let multiPaths = [];
@@ -68,7 +77,7 @@ let contentLocale = 'en'; // 用户语言偏好，用于 toast 国际化
 let buttonSize = 26;        // 悬浮按钮大小（px）
 let toolbarSpacing = 7;     // 多路径工具栏按钮间距（px）
 let buttonPosition = 'top-right'; // 按钮弹出位置
-let borderHighlightColor = '#e8a817'; // 自定义边框颜色
+let borderHighlightColor = '#e6a100'; // 自定义高亮颜色（RGB 230 161 0）
 
 // URL 转换策略
 let urlStrategies = [];

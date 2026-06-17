@@ -42,7 +42,7 @@
                                 <span data-i18n="imgTags">IMG</span>
                             </label>
                             <label class="chip">
-                                <input type="checkbox" id="detectVideo" checked>
+                                <input type="checkbox" id="detectVideo">
                                 <span data-i18n="videoElements">Video</span>
                             </label>
                         </div>
@@ -92,6 +92,11 @@
                         </div>
                     </div>
                     <div class="interaction-control">
+                        <span class="interaction-label" data-i18n="hoverDelay">Delay:</span>
+                        <input type="range" id="hoverDelay" min="300" max="1700" step="100" value="1000">
+                        <span id="delayValue" class="interaction-value">1.0s</span>
+                    </div>
+                    <div class="interaction-control">
                         <span class="interaction-label" data-i18n="buttonSize">Button size:</span>
                         <input type="range" id="buttonSize" min="20" max="32" step="2" value="26">
                         <span id="buttonSizeValue" class="interaction-value">26px</span>
@@ -100,11 +105,6 @@
                         <span class="interaction-label" data-i18n="toolbarSpacing">Btn gap:</span>
                         <input type="range" id="toolbarSpacing" min="2" max="12" step="1" value="7">
                         <span id="toolbarSpacingValue" class="interaction-value">7px</span>
-                    </div>
-                    <div class="interaction-control">
-                        <span class="interaction-label" data-i18n="hoverDelay">Delay:</span>
-                        <input type="range" id="hoverDelay" min="300" max="1700" step="100" value="1000">
-                        <span id="delayValue" class="interaction-value">1.0s</span>
                     </div>
                 </section>
 
@@ -143,8 +143,8 @@
                         </label>
                         <label class="radio-label">
                             <input type="radio" name="borderHighlight" id="borderHighlightCustom" value="custom">
-                            <span data-i18n="customBorderColor">Custom border color</span>
-                            <input type="color" id="borderHighlightColor" value="#e8a817" class="border-color-picker">
+                            <span data-i18n="customBorderColor">Custom highlight color</span>
+                            <input type="color" id="borderHighlightColor" value="#e6a100" class="border-color-picker">
                         </label>
                     </div>
                     <p class="help-text" data-i18n="visualFeedbackHelp">Show border around images when hovering</p>

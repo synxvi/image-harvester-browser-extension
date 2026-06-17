@@ -1,5 +1,22 @@
 /* Image Harvester - Content Styles */
 
+/* Halo overlay 兜底样式：实际动画/颜色由 content-strategies.js 注入的 <style> 提供。
+   这里只保证万一 <style> 注入失败/延迟时，浮层是透明无形的，不会挡住页面。 */
+.ih-halo-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    background: transparent;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    pointer-events: none;
+    z-index: 2147483646;
+    display: none;
+}
+
 .ih-download-btn {
     display: none;
     position: fixed;
