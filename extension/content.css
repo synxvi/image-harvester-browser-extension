@@ -33,7 +33,9 @@
     font-size: 14px;
     line-height: 1;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.15);
-    transition: all 0.2s ease;
+    /* 只过渡 hover/active 交互相关的属性；right/top/left 不过渡，
+       避免切图/重定位时按钮从边缘滑到目标位置（用户反馈的「贴边再弹上去」）。 */
+    transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
     user-select: none;
     z-index: 2147483647;
     align-items: center;
@@ -67,13 +69,8 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     padding: 0;
-    transition: right 0.15s ease, top 0.15s ease;
-    animation: ih-toolbar-fadeIn 0.15s ease-out;
-}
-
-@keyframes ih-toolbar-fadeIn {
-    from { opacity: 0; transform: translateX(4px); }
-    to { opacity: 1; transform: translateX(0); }
+    /* 不对 right/top 过渡、不做位移淡入：切图/重定位时直接吸附到目标位置，
+       避免工具栏从边缘滑到目标（用户反馈的「贴边再弹上去」动画）。 */
 }
 
 /* Individual path button inside the toolbar */

@@ -211,8 +211,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Handle mouse events
 function handleMouseEnter(e) {
     if (!isEnabled || isDomainExcluded) return;
+    triggerHoverDetection(e.target);
+}
 
-    let element = e.target;
+// 核心：对给定元素执行悬停检测（按钮/高光的显示逻辑）。
+// 既被 handleMouseEnter(mouseenter 事件) 调用，也被「页面加载时光标已在图片上」的
+// 兜底检测调用——后者用于修复「新标签页打开大图、光标静止/移动中大图未触发 mouseenter」
+// 导致悬浮按钮不显示的问题（如 Wallhaven 缩略图点进大图新标签页）。
+function triggerHoverDetection(rawElement) {
+    let element = rawElement;
 
     // 缩略图直链下载（实验性）：当悬停目标不是 IMG/VIDEO/SVG 时，
     // 检测是否为覆盖在 IMG 上的叠加层。仅当候选 IMG 匹配到已启用的 URL 转换策略时才激活，
@@ -297,17 +304,23 @@ function handleMouseEnter(e) {
         hideTimer = null;
     }
 
+    // 已激活快速跟随：若用户此前已在某图片上停留足够久、下载按钮已显示
+    // （currentImage 指向旧图且按钮仍在 DOM），此时鼠标移到另一张图
+    // （如点击缩略图弹出大图），不再重跑完整 hoverDelay，而是立即弹出按钮。
+    const alreadyActive = !!(downloadButton && currentImage && downloadButton.parentNode);
+
     // Set timer for download button
     hoverTimer = setTimeout(() => {
         showDownloadButton(element);
-    }, hoverDelay);
+    }, alreadyActive ? 0 : hoverDelay);
 
     // Set separate timer for glow effect
+    // 已激活时同样跳过 glowDelay，与按钮同步立即跟随到新图。
     if (borderHighlightMode !== 'off') {
         clearTimeout(glowTimer);
         glowTimer = setTimeout(() => {
             toggleBorderHighlight(element, true);
-        }, glowDelay);
+        }, alreadyActive ? 0 : glowDelay);
     }
 }
 
@@ -431,6 +444,48 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
             debug.log('WebP to PNG conversion changed:', convertWebpToPng);
         }
 
+        // 视觉反馈：颜色/模式变更即时生效。
+        // 不依赖 popup → content 的 settings_updated 消息（该方法在某些 popup 打开方式下
+        // currentWindow 解析不到内容标签页），storage.onChanged 是全局广播、最可靠。
+        if (changes.ih_border_highlight_color) {
+            borderHighlightColor = changes.ih_border_highlight_color.newValue || '#e6a100';
+            if (borderHighlightMode !== 'off') {
+                const existingStyle = document.getElementById('ih-border-styles');
+                if (existingStyle) {
+                    existingStyle.textContent = generateBorderCSS();
+                } else {
+                    injectBorderCSS();
+                }
+            }
+            debug.log('Border highlight color changed:', borderHighlightColor);
+        }
+
+        if (changes.ih_border_highlight_mode) {
+            borderHighlightMode = changes.ih_border_highlight_mode.newValue || CONFIG.DEFAULT_BORDER_HIGHLIGHT;
+            if (borderHighlightMode !== 'off') {
+                const existingStyle = document.getElementById('ih-border-styles');
+                if (existingStyle) {
+                    existingStyle.textContent = generateBorderCSS();
+                } else {
+                    injectBorderCSS();
+                }
+            } else {
+                destroyHaloOverlay();
+            }
+            debug.log('Border highlight mode changed:', borderHighlightMode);
+        }
+
+        // 交互尺寸/位置变更即时生效（与 settings_updated 路径双保险）
+        if (changes.ih_button_size !== undefined) {
+            buttonSize = changes.ih_button_size.newValue || 26;
+        }
+        if (changes.ih_toolbar_spacing !== undefined) {
+            toolbarSpacing = changes.ih_toolbar_spacing.newValue || 7;
+        }
+        if (changes.ih_button_position !== undefined) {
+            buttonPosition = changes.ih_button_position.newValue || 'top-right';
+        }
+
         if (changes.ih_ui_language) {
             const newLang = changes.ih_ui_language.newValue;
             if (newLang && newLang !== 'auto') {
@@ -552,6 +607,52 @@ window.addEventListener('resize', () => {
         positionButton(currentImage, downloadButton);
     }
 });
+
+// ===== 页面加载时光标已在图片上的兜底检测 =====
+// 记录最新光标位置（视口坐标）。mouseenter 事件在「新标签页加载完成时光标
+// 已静止/移动中大图区域内」时不会可靠触发，需要用光标位置主动命中检测。
+let lastCursorX = -1;
+let lastCursorY = -1;
+document.addEventListener('mousemove', (e) => {
+    lastCursorX = e.clientX;
+    lastCursorY = e.clientY;
+}, true);
+
+// 在光标位置进行命中测试，找到最顶层可下载元素并触发悬停检测。
+// 返回是否命中了可检测元素（供加载兜底判断是否需要继续重试）。
+function detectHoverAtCursor() {
+    if (!isEnabled || isDomainExcluded) return false;
+    if (lastCursorX < 0 || lastCursorY < 0) return false;
+
+    const el = document.elementFromPoint(lastCursorX, lastCursorY);
+    if (!el) return false;
+
+    triggerHoverDetection(el);
+    return true;
+}
+
+// 页面加载完成后兜底：若光标此刻正好在一张可下载图片上，主动触发一次悬停检测。
+// 用 setTimeout 给页面布局/图片渲染留出时间，避免 elementFromPoint 命中到占位骨架。
+// 多次延迟重试覆盖图片懒加载/后续渲染的场景（如 Wallhaven 大图在 DOM 注入后才到位）。
+// 仅当尚未进入任何图片（mouseenter 从未触发 / 已 mouseleave）时才兜底，
+// 避免与正常 mouseenter 路径重复触发、重置 hover 定时器。
+function checkHoverOnLoad() {
+    if (!isEnabled || isDomainExcluded) return;
+    const retries = [300, 900, 2000];
+    retries.forEach(delay => {
+        setTimeout(() => {
+            if (!isMouseOverImage) {
+                detectHoverAtCursor();
+            }
+        }, delay);
+    });
+}
+
+if (document.readyState === 'complete') {
+    checkHoverOnLoad();
+} else {
+    window.addEventListener('load', checkHoverOnLoad);
+}
 
 // Initialize extension (includes checkDomainExclusion internally)
 initializeExtension();

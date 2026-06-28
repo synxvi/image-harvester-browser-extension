@@ -109,6 +109,11 @@ function handleImageLoad() {
     if (downloadButton && downloadButton.parentNode) {
         positionButton(currentImage, downloadButton);
     }
+    // 新图加载完成后尺寸才会最终确定（尤其无显式宽高、靠自然尺寸的图片），
+    // 此时同步重定位 halo，避免高光框停留在加载前的小尺寸。
+    if (haloTarget === currentImage) {
+        positionHaloOverlay();
+    }
 }
 
 // 为当前悬停图片挂载尺寸/src 变化观察器
@@ -133,6 +138,12 @@ function attachImageObservers(img) {
         if (currentImage && downloadButton && downloadButton.parentNode) {
             positionButton(currentImage, downloadButton);
         }
+        // 视觉反馈浮层与按钮共享同一目标：按钮定位时同步重定位 halo，
+        // 避免出现「按钮已跟随到大图、高光框仍停留在小图尺寸」的视觉不一致。
+        // （halo 自身也有 ResizeObserver，但按钮的回调时机更早/更可靠。）
+        if (haloTarget === img) {
+            positionHaloOverlay();
+        }
     });
     imageResizeObserver.observe(img);
 
@@ -151,6 +162,11 @@ function attachImageObservers(img) {
                     positionButton(currentImage, downloadButton);
                 }
             });
+        }
+        // src 变化（如缩略图 WebP → 大图 JPG）时同步重定位 halo
+        if (haloTarget === img) {
+            positionHaloOverlay();
+            requestAnimationFrame(positionHaloOverlay);
         }
     });
     imageMutationObserver.observe(img, { attributes: true, attributeFilter: ['src'] });
@@ -182,6 +198,11 @@ function showDownloadButton(img) {
         return;
     }
 
+    // 切图前快照：视觉反馈是否处于激活状态（用户此前 hover 已亮起 halo）。
+    // glowDelay(500) < hoverDelay(1000)，切到新图时 halo 可能还停在旧图上，
+    // 需在按钮切换到新图后立即把 halo 也迁移过去，避免「按钮跟随大图、高光框停在旧小图」。
+    const haloWasActive = (borderHighlightMode !== 'off') && haloOverlay && haloTarget;
+
     // Destroy old button/toolbar only when switching to a different image or first show.
     // 传入新图作为 halo 保留目标：切图时 halo 可能已亮在新图上（glow 500ms < hover 1000ms），
     // 不能误清；其余调用方不传此参数，按钮销毁即同步清理 halo，避免浮层泄漏。
@@ -208,6 +229,12 @@ function showDownloadButton(img) {
     positionButton(img, downloadButton);
     downloadButton.style.display = downloadButton.classList.contains('ih-download-toolbar') ? 'block' : 'flex';
     currentImage = img;
+
+    // 切图同步迁移 halo：若切换前 halo 已激活（且尚未指向新图），
+    // 立即在新图上重建，使其与下载按钮同目标、同尺寸。
+    if (haloWasActive && haloTarget !== img) {
+        toggleBorderHighlight(img, true);
+    }
 
     // 挂载观察器：跟踪图片尺寸/src 变化，实现按钮平滑跟随
     attachImageObservers(img);
