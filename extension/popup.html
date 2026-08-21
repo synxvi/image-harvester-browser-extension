@@ -26,6 +26,7 @@
             <div class="tab-track" data-active="basic">
                 <button class="tab-btn active" data-tab="basic" data-i18n="tabBasic">General</button>
                 <button class="tab-btn" data-tab="advanced" data-i18n="tabAdvanced">Advanced</button>
+                <button class="tab-btn" data-tab="downloads" data-i18n="tabDownloads">Downloads</button>
                 <div class="tab-indicator"></div>
             </div>
         </nav>
@@ -246,6 +247,18 @@
                     <div class="card-divider"></div>
                     <button type="button" class="action-btn action-reset" id="resetBtn" data-i18n="resetAllSettings">🔄 Reset All Settings</button>
                     <p class="help-text" data-i18n="resetAllSettingsHelp">Reset all settings to default values. This action cannot be undone.</p>
+                </section>
+            </div>
+
+            <!-- ====== 下载记录 ====== -->
+            <div class="tab-pane" id="tab-downloads">
+                <section class="card">
+                    <div class="dl-history-header">
+                        <span class="card-title" data-i18n="downloadHistoryTitle">Recent downloads</span>
+                        <button type="button" class="dl-clear-btn" id="clearHistoryBtn" data-i18n="clearDownloadHistory">Clear</button>
+                    </div>
+                    <p class="help-text" data-i18n="downloadHistoryHelp">Records of downloads triggered from this browser</p>
+                    <div id="downloadHistoryList" class="dl-history-list"></div>
                 </section>
             </div>
         </main>

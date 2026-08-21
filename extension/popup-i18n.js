@@ -174,6 +174,21 @@ const i18n = {
             statusPathEmpty: 'Name and folder cannot be empty',
             tabBasic: 'General',
             tabAdvanced: 'Advanced',
+            tabDownloads: 'Downloads',
+
+            // Download history
+            downloadHistoryTitle: 'Recent downloads',
+            downloadHistoryHelp: 'Up to 300 records within the last 7 days',
+            downloadHistoryEmpty: 'No downloads yet',
+            clearDownloadHistory: 'Clear',
+            downloadStatusPending: 'Downloading',
+            downloadStatusSuccess: 'Saved',
+            downloadStatusFailed: 'Failed',
+            dlTimeJustNow: 'just now',
+            dlTimeMinutesAgo: '{n}m ago',
+            statusRetryQueued: 'Retrying: {name}',
+            retryNotAvailable: 'Cannot retry (re-encoded in page)',
+            retryHint: 'Click to retry',
 
             // Filename template & provenance (task 2)
             namingProvenanceTitle: 'Filename template & provenance',
@@ -350,6 +365,21 @@ const i18n = {
             statusPathEmpty: '\u540D\u79F0\u548C\u76EE\u5F55\u4E0D\u80FD\u4E3A\u7A7A',
             tabBasic: '\u5E38\u89C4',
             tabAdvanced: '\u9AD8\u7EA7',
+            tabDownloads: '\u4E0B\u8F7D\u8BB0\u5F55',
+
+            // Download history
+            downloadHistoryTitle: '\u8FD1\u671F\u4E0B\u8F7D',
+            downloadHistoryHelp: '\u8FD17\u5929\u5185\u6700\u591A300\u6761\u8BB0\u5F55',
+            downloadHistoryEmpty: '\u6682\u65E0\u4E0B\u8F7D\u8BB0\u5F55',
+            clearDownloadHistory: '\u6E05\u7A7A',
+            downloadStatusPending: '\u4E0B\u8F7D\u4E2D',
+            downloadStatusSuccess: '\u6210\u529F',
+            downloadStatusFailed: '\u5931\u8D25',
+            dlTimeJustNow: '\u521A\u521A',
+            dlTimeMinutesAgo: '{n} \u5206\u949F\u524D',
+            statusRetryQueued: '\u6B63\u5728\u91CD\u8BD5\uFF1A{name}',
+            retryNotAvailable: '\u65E0\u6CD5\u91CD\u8BD5\uFF08\u8BE5\u56FE\u7247\u9700\u5728\u9875\u9762\u5185\u91CD\u65B0\u8F6C\u6362\uFF09',
+            retryHint: '\u70B9\u51FB\u91CD\u8BD5',
 
             // Filename template & provenance (task 2)
             namingProvenanceTitle: '命名模板与溯源',

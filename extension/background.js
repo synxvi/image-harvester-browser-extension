@@ -22,19 +22,22 @@ let dynamicRuleIdCount = 1000;
 const hostnameToRuleId = new Map();
 
 // Helper: update badge for specific tab
+// 注意：MV3 下无回调调用返回 Promise；badge 更新是异步的，回调执行时
+// tab 可能已关闭，reject 的 promise 不 catch 会成为 unhandled rejection
+// （"No tab with id"），进而污染 chrome://extensions 错误面板。
 function updateBadge(disabled, excluded = false, tabId = null) {
     const text = disabled ? 'OFF' : (excluded ? 'X' : '');
     const color = '#c08040';
     
     if (tabId) {
-        chrome.action.setBadgeText({ text, tabId });
+        chrome.action.setBadgeText({ text, tabId }).catch(() => {});
         if (text) {
-            chrome.action.setBadgeBackgroundColor({ color, tabId });
+            chrome.action.setBadgeBackgroundColor({ color, tabId }).catch(() => {});
         }
     } else {
-        chrome.action.setBadgeText({ text });
+        chrome.action.setBadgeText({ text }).catch(() => {});
         if (text) {
-            chrome.action.setBadgeBackgroundColor({ color });
+            chrome.action.setBadgeBackgroundColor({ color }).catch(() => {});
         }
     }
     debug.log(`Badge updated: text="${text}", color="${color}", tabId=${tabId || 'all'}`);
@@ -197,6 +200,212 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 // Download ID → Tab ID 映射，用于下载完成后通知对应页面
 const downloadTabMap = new Map();
 
+// ===== 近期下载记录（popup「下载记录」tab 的数据源）=====
+// 记录生命周期：downloadImage/downloadCanvasImage 入口创建 pending 记录，
+// downloads.onChanged 的 complete/interrupted 或各失败分支将其终结为 success/failed。
+// 保留策略：近 7 天内最多 300 条（写入时统一裁剪，无需定时清理）。
+const DOWNLOAD_HISTORY_KEY = 'ih_download_history';
+const DOWNLOAD_HISTORY_MAX = 300;
+const DOWNLOAD_HISTORY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// data:/blob: 这类超长 URL 不适合整段入 storage，仅保留截断标记
+function safeUrlForRecord(url) {
+    if (!url) return '';
+    if (url.length > 500) return url.slice(0, 200) + '…(truncated)';
+    return url;
+}
+
+async function recordDownloadStart(meta) {
+    const record = {
+        id: 'dl_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
+        filename: meta.filename || 'media',
+        url: safeUrlForRecord(meta.url),
+        status: 'pending', // pending | success | failed
+        error: null,
+        ts: Date.now(),
+        downloadId: null,
+        mode: meta.mode || 'normal',      // 下载模式，重试时恢复
+        pathIndex: meta.pathIndex ?? -1   // 保存路径索引，重试时恢复
+    };
+    try {
+        const data = await chrome.storage.local.get(DOWNLOAD_HISTORY_KEY);
+        let list = Array.isArray(data[DOWNLOAD_HISTORY_KEY]) ? data[DOWNLOAD_HISTORY_KEY] : [];
+        list.unshift(record);
+        // 裁剪：只保留 7 天内的记录，且最多 300 条
+        const cutoff = Date.now() - DOWNLOAD_HISTORY_TTL_MS;
+        list = list.filter(r => (r.ts || 0) >= cutoff).slice(0, DOWNLOAD_HISTORY_MAX);
+        await chrome.storage.local.set({ [DOWNLOAD_HISTORY_KEY]: list });
+    } catch (e) {
+        debug.warn('写入下载记录失败:', e);
+    }
+    // 开启心跳：无 downloadId 的 pending（如 fetch 阶段）由校正逻辑超时终结
+    scheduleDownloadReconcile();
+    return record;
+}
+
+// 按 record.id 更新状态；downloadId 产生后需先绑定再由 onChanged 驱动终结
+async function patchDownloadRecord(recordId, patch) {
+    if (!recordId) return;
+    try {
+        const data = await chrome.storage.local.get(DOWNLOAD_HISTORY_KEY);
+        const list = Array.isArray(data[DOWNLOAD_HISTORY_KEY]) ? data[DOWNLOAD_HISTORY_KEY] : [];
+        const rec = list.find(r => r.id === recordId);
+        if (rec) {
+            Object.assign(rec, patch);
+            await chrome.storage.local.set({ [DOWNLOAD_HISTORY_KEY]: list });
+        }
+    } catch (e) {
+        debug.warn('更新下载记录失败:', e);
+    }
+}
+
+// downloadId → recordId 内存映射：downloads.download 对 dataUrl 的下载几乎瞬间
+// 完成，onChanged(complete/interrupted) 可能先于「记录绑定 downloadId 落盘」触发，
+// 此时按 storage 里的 downloadId 字段查不到记录。绑定时先写内存映射，
+// onChanged 优先查内存，落盘字段仅作 SW 重启后的兜底。
+const recordIdByDownloadId = new Map();
+
+async function bindDownloadRecord(recordId, downloadId, extra = {}) {
+    if (!recordId || downloadId === undefined) return;
+    recordIdByDownloadId.set(downloadId, recordId);
+    await patchDownloadRecord(recordId, { downloadId, ...extra });
+    // onChanged 可能因 SW 休眠丢失，心跳校正兜底
+    scheduleDownloadReconcile();
+}
+
+// 按 downloadId 更新状态（onChanged 回调只有 downloadId，没有 record.id）
+async function patchDownloadRecordByDownloadId(downloadId, patch) {
+    const recordId = recordIdByDownloadId.get(downloadId);
+    if (recordId) {
+        if (patch.status) recordIdByDownloadId.delete(downloadId); // 终态，解除映射
+        await patchDownloadRecord(recordId, patch);
+        return;
+    }
+    try {
+        const data = await chrome.storage.local.get(DOWNLOAD_HISTORY_KEY);
+        const list = Array.isArray(data[DOWNLOAD_HISTORY_KEY]) ? data[DOWNLOAD_HISTORY_KEY] : [];
+        const rec = list.find(r => r.downloadId === downloadId);
+        if (rec) {
+            Object.assign(rec, patch);
+            await chrome.storage.local.set({ [DOWNLOAD_HISTORY_KEY]: list });
+        }
+    } catch (e) {
+        debug.warn('按 downloadId 更新下载记录失败:', e);
+    }
+}
+
+// SW 冷启动时清理孤儿 pending：上次会话 SW 被杀导致终态无人写入
+// （direct download 由浏览器进程继续，但 onChanged 已无人监听），
+// 超过 30 分钟仍 pending 的记录标记为结果未知。
+(async () => {
+    try {
+        const data = await chrome.storage.local.get(DOWNLOAD_HISTORY_KEY);
+        const list = Array.isArray(data[DOWNLOAD_HISTORY_KEY]) ? data[DOWNLOAD_HISTORY_KEY] : [];
+        let changed = false;
+        list.forEach(r => {
+            if (r.status === 'pending' && Date.now() - (r.ts || 0) > 30 * 60 * 1000) {
+                r.status = 'failed';
+                r.error = 'RESULT_UNKNOWN (service worker restarted)';
+                changed = true;
+            }
+        });
+        if (changed) await chrome.storage.local.set({ [DOWNLOAD_HISTORY_KEY]: list });
+    } catch (e) { /* ignore */ }
+})();
+
+// 通知对应页面下载失败（content 弹红色 toast）
+function notifyDownloadFailed(tabId, filename, error) {
+    if (!tabId) return;
+    chrome.tabs.sendMessage(tabId, {
+        type: 'download_failed',
+        filename: filename || '',
+        error: error || ''
+    }).catch(() => {});
+}
+
+// ===== pending 记录心跳校正 =====
+// MV3 的 SW 在无活动 30 秒后被终止；downloads.download 返回后大 dataUrl 的
+// 写盘由浏览器进程完成（可能持续几十秒~分钟），期间 SW 已休眠，
+// 死在休眠期的 onChanged(complete/interrupted) 事件不会重放 → 记录永远 pending。
+// 通过 alarm 心跳让 SW 周期性唤醒，用 downloads.search 主动查询下载项真实状态
+// 并校正记录（查询不依赖事件投递，跨 SW 会话可靠）。
+const RECONCILE_ALARM = 'ih-dl-reconcile';
+const RECONCILE_PERIOD_MIN = 0.5; // alarm 最小周期 30 秒
+
+function scheduleDownloadReconcile() {
+    chrome.alarms.create(RECONCILE_ALARM, {
+        delayInMinutes: RECONCILE_PERIOD_MIN,
+        periodInMinutes: RECONCILE_PERIOD_MIN
+    }).catch(() => {});
+}
+
+async function reconcilePendingDownloads() {
+    let list = [];
+    try {
+        const data = await chrome.storage.local.get(DOWNLOAD_HISTORY_KEY);
+        list = Array.isArray(data[DOWNLOAD_HISTORY_KEY]) ? data[DOWNLOAD_HISTORY_KEY] : [];
+    } catch (e) {
+        return;
+    }
+
+    const pendings = list.filter(r => r.status === 'pending');
+    if (pendings.length === 0) {
+        chrome.alarms.clear(RECONCILE_ALARM).catch(() => {});
+        return;
+    }
+
+    let changed = false;
+    for (const rec of pendings) {
+        if (rec.downloadId != null) {
+            try {
+                const items = await chrome.downloads.search({ id: rec.downloadId });
+                if (items.length === 1) {
+                    const state = items[0].state;
+                    if (state === 'complete') {
+                        rec.status = 'success';
+                        changed = true;
+                    } else if (state === 'interrupted') {
+                        rec.status = 'failed';
+                        rec.error = items[0].error || 'INTERRUPTED';
+                        changed = true;
+                    }
+                    // in_progress → 保持 pending，下轮心跳再查
+                } else {
+                    // 下载项已不存在（被删除/浏览器重装），无法确认结果
+                    rec.status = 'failed';
+                    rec.error = 'DOWNLOAD_ITEM_NOT_FOUND';
+                    changed = true;
+                }
+            } catch (e) {
+                debug.warn('校正下载记录失败:', rec.id, e);
+            }
+        } else if (Date.now() - (rec.ts || 0) > 3 * 60 * 1000) {
+            // 长时间未获得 downloadId：SW 在 fetch 阶段被终止、请求协程被丢弃
+            rec.status = 'failed';
+            rec.error = 'REQUEST_INTERRUPTED';
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        try {
+            await chrome.storage.local.set({ [DOWNLOAD_HISTORY_KEY]: list });
+        } catch (e) {
+            debug.warn('保存校正后的下载记录失败:', e);
+        }
+    }
+
+    if (!list.some(r => r.status === 'pending')) {
+        chrome.alarms.clear(RECONCILE_ALARM).catch(() => {});
+    }
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === RECONCILE_ALARM) {
+        reconcilePendingDownloads();
+    }
+});
+
 // Handle download requests from content script
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender.tab?.id;
@@ -226,6 +435,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse({ success: false, dataUrl: null });
         });
         return true; // Keep message channel open for async response
+    } else if (message.type === 'record_download_failed') {
+        // content 侧 canvas/WebP blob 的下载消息本身发送失败（如超消息上限），
+        // background 侧无感知，由 content 主动补记一条失败记录
+        recordDownloadStart({ filename: message.filename, url: message.url })
+            .then(rec => patchDownloadRecord(rec.id, { status: 'failed', error: message.error || 'MESSAGE_SEND_FAILED' }))
+            .catch(() => {});
+    } else if (message.type === 'retry_download') {
+        // popup「下载记录」失败条目的重试：按原记录恢复 URL/文件名/模式/路径。
+        // 无 tabId（发起页面可能已关闭），结果由下载记录/心跳校正呈现。
+        downloadImage(message.url, message.filename, message.mode || 'normal', message.pathIndex ?? -1, null);
     } else if (message.type === 'ih:domain_status_changed') {
         // Only handle from top-level frame
         if (sender.frameId !== undefined && sender.frameId !== 0) {
@@ -277,33 +496,68 @@ async function addRefererRule(mediaHost, referer) {
     }
 }
 
+// Content-Type → 扩展名映射（原 content fast path 的格式保留逻辑收口至此）
+const CONTENT_TYPE_EXTS = {
+    'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
+    'image/webp': '.webp', 'image/svg+xml': '.svg', 'image/bmp': '.bmp',
+    'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov'
+};
+
+// 若文件名扩展名与实际 Content-Type 不符，则修正为正确扩展名
+function applyContentTypeExtension(filename, contentType) {
+    const correctExt = CONTENT_TYPE_EXTS[(contentType || '').split(';')[0].trim()];
+    if (!correctExt) return filename;
+    const currentExt = '.' + (filename.split('.').pop() || '').toLowerCase();
+    // jpg/jpeg 视为等价，避免无意义的重命名
+    const equiv = { '.jpg': ['.jpeg'], '.jpeg': ['.jpg'] };
+    const allowed = equiv[currentExt] || [];
+    if (currentExt !== correctExt && !allowed.includes(correctExt)) {
+        return filename.replace(/\.[^.]+$/, correctExt);
+    }
+    return filename;
+}
+
+function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => reader.result ? resolve(reader.result) : reject(new Error('FileReader empty'));
+        reader.onerror = () => reject(reader.error || new Error('FileReader error'));
+        reader.readAsDataURL(blob);
+    });
+}
+
 // Download image function
 async function downloadImage(url, filename, downloadMode = 'normal', pathIndex = -1, tabId = null) {
-    try {
-        // Clean filename - remove any potentially problematic characters
-        const cleanFilename = filename.replace(/[<>:"/\\|?*]/g, '_');
+    // Clean filename - remove any potentially problematic characters
+    const cleanFilename = filename.replace(/[<>:"/\\|?*]/g, '_');
+    const record = await recordDownloadStart({ filename: cleanFilename, url, mode: downloadMode || 'normal', pathIndex: pathIndex ?? -1 });
 
+    try {
         // 优先通过 background 的 fetch 下载（DNR 规则生效且无 CORS 限制）
-        // 这对依赖 Referer 验证的站点（如 Pixiv）至关重要
+        // 这对依赖 Referer 验证的站点（如 Pixiv）至关重要。
+        // 大图内容全程留在 SW 内转 dataUrl，不经过扩展消息通道（无 64MB 消息上限、
+        // 页面主线程不做 base64 编码），修复大图连续下载偶发丢失的问题。
         try {
             const response = await fetch(url);
             if (response.ok) {
                 const blob = await response.blob();
-                const reader = new FileReader();
-                reader.onloadend = () => {
-                    if (reader.result) {
-                        downloadCanvasImage(reader.result, cleanFilename, pathIndex, tabId);
-                    }
-                };
-                reader.readAsDataURL(blob);
-                debug.log(`Image fetched via background and downloaded: ${cleanFilename}`);
-                return;
+                if (blob && blob.size > 0) {
+                    const finalFilename = applyContentTypeExtension(cleanFilename, response.headers.get('Content-Type') || blob.type);
+                    const dataUrl = await blobToDataUrl(blob);
+                    await downloadCanvasImage(dataUrl, finalFilename, pathIndex, tabId, record);
+                    debug.log(`Image fetched via background and downloaded: ${finalFilename}`);
+                    return;
+                }
+                debug.warn('Background fetch returned empty blob, falling back to direct download');
+            } else {
+                debug.log('Background fetch failed with status', response.status, '- falling back to direct download');
             }
         } catch (fetchError) {
             debug.log('Background fetch failed, falling back to direct download:', fetchError.message);
         }
 
         // Fallback: direct chrome.downloads.download
+        // （浏览器进程发起下载，不受 SW 生命周期影响）
         const downloadId = await chrome.downloads.download({
             url: url,
             filename: await buildDownloadPath(cleanFilename, pathIndex),
@@ -311,6 +565,7 @@ async function downloadImage(url, filename, downloadMode = 'normal', pathIndex =
         });
 
         if (tabId) downloadTabMap.set(downloadId, tabId);
+        await bindDownloadRecord(record.id, downloadId, { filename: cleanFilename });
 
         debug.log(`Image download started: ${cleanFilename} (ID: ${downloadId}) - Mode: ${downloadMode} - PathIndex: ${pathIndex}`);
     } catch (error) {
@@ -323,14 +578,25 @@ async function downloadImage(url, filename, downloadMode = 'normal', pathIndex =
                 saveAs: false
             });
             if (tabId) downloadTabMap.set(fallbackId, tabId);
+            await bindDownloadRecord(record.id, fallbackId);
         } catch (fallbackError) {
             debug.error('Fallback download also failed:', fallbackError);
+            const errMsg = fallbackError.message || String(fallbackError);
+            await patchDownloadRecord(record.id, { status: 'failed', error: errMsg });
+            notifyDownloadFailed(tabId, cleanFilename, errMsg);
         }
     }
 }
 
 // Download canvas-extracted image (or fast-path blob) from data URL
-async function downloadCanvasImage(dataUrl, filename, pathIndex = -1, tabId = null) {
+// record: 复用调用方已创建的下载记录（downloadImage fetch 成功路径），
+//         不传则自建（content 的 canvas/WebP 转换 blob 直接调用）。
+async function downloadCanvasImage(dataUrl, filename, pathIndex = -1, tabId = null, record = null) {
+    let rec = record;
+    if (!rec) {
+        rec = await recordDownloadStart({ filename, url: dataUrl, mode: 'converted', pathIndex: pathIndex ?? -1 });
+    }
+
     try {
         debug.log('Downloading canvas/fast-path image:', filename);
 
@@ -344,17 +610,24 @@ async function downloadCanvasImage(dataUrl, filename, pathIndex = -1, tabId = nu
         });
 
         if (tabId) downloadTabMap.set(downloadId, tabId);
+        await bindDownloadRecord(rec.id, downloadId, { filename: cleanFilename });
 
         debug.log(`Canvas/Fast-path image download started: ${cleanFilename} (ID: ${downloadId})`);
 
     } catch (error) {
         debug.error('Canvas/Fast-path image download failed:', error);
+        const errMsg = error.message || String(error);
+        await patchDownloadRecord(rec.id, { status: 'failed', error: errMsg });
+        notifyDownloadFailed(tabId, filename, errMsg);
     }
 }
 
-// 监听下载完成，通知对应页面弹出 toast
+// 监听下载状态变化：complete → 通知页面 + 记录置成功；
+// interrupted（网络错误/被取消/被安全软件拦截等）→ 通知页面失败 + 记录置失败。
 chrome.downloads.onChanged.addListener((delta) => {
-    if (delta.state && delta.state.current === 'complete') {
+    if (!delta.state) return;
+
+    if (delta.state.current === 'complete') {
         const tabId = downloadTabMap.get(delta.id);
         if (tabId) {
             chrome.tabs.sendMessage(tabId, { type: 'download_complete' }).catch(() => {
@@ -362,6 +635,16 @@ chrome.downloads.onChanged.addListener((delta) => {
             });
             downloadTabMap.delete(delta.id);
         }
+        patchDownloadRecordByDownloadId(delta.id, { status: 'success' });
+    } else if (delta.state.current === 'interrupted') {
+        const errCode = (delta.error && delta.error.current) || 'INTERRUPTED';
+        const tabId = downloadTabMap.get(delta.id);
+        if (tabId) {
+            chrome.tabs.sendMessage(tabId, { type: 'download_failed', error: errCode }).catch(() => {});
+            downloadTabMap.delete(delta.id);
+        }
+        patchDownloadRecordByDownloadId(delta.id, { status: 'failed', error: errCode });
+        debug.log('Download interrupted:', delta.id, errCode);
     }
 });
 

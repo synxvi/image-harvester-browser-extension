@@ -11,7 +11,8 @@
     "activeTab",
     "contextMenus",
     "declarativeNetRequest",
-    "declarativeNetRequestWithHostAccess"
+    "declarativeNetRequestWithHostAccess",
+    "alarms"
   ],
   "host_permissions": [
     "<all_urls>"

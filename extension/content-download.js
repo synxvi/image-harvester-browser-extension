@@ -26,8 +26,8 @@ function showPageToast(messageKey, type = 'start') {
 
     // 内置翻译表，支持 popup 中用户选择的语言
     const translations = {
-        en: { toastDownloadStart: 'Downloading', toastDownloadComplete: 'Downloaded' },
-        zh_CN: { toastDownloadStart: '开始下载', toastDownloadComplete: '下载完成' }
+        en: { toastDownloadStart: 'Downloading', toastDownloadComplete: 'Downloaded', toastDownloadFailed: 'Download failed' },
+        zh_CN: { toastDownloadStart: '开始下载', toastDownloadComplete: '下载完成', toastDownloadFailed: '下载失败' }
     };
 
     // 根据用户语言偏好获取文本
@@ -167,11 +167,37 @@ async function downloadElement(element, pathIndex = -1) {
         chrome.storage.sync.get(['ih_download_mode'], async (result) => {
             const downloadMode = result.ih_download_mode || 'normal';
 
+            // 触发成功反馈：按钮短暂显示 ✅（操作快照引用，防悬停切换竞态）
+            const markTriggered = () => {
+                if (activeButton && activeButton.parentNode) {
+                    activeButton.innerHTML = '✅';
+                    setTimeout(() => {
+                        if (activeButton && activeButton.parentNode) {
+                            activeButton.innerHTML = activeButtonHtml;
+                            activeButton.title = 'Save image';
+                        }
+                    }, 2000);
+                }
+            };
+
+            // 下载请求失败反馈：页面红色 toast + 通知 background 补记失败记录
+            const reportFailure = (finalFilename, err) => {
+                showPageToast('toastDownloadFailed', 'error');
+                chrome.runtime.sendMessage({
+                    type: 'record_download_failed',
+                    filename: finalFilename || filename,
+                    url: (elementUrl && elementUrl.length <= 500) ? elementUrl : '',
+                    error: (err && err.message) || String(err || '')
+                }).catch(() => {});
+            };
+
             // Helper to download a blob locally
             // 通过 background 的 download_canvas_image 统一下载，而非 <a download>。
             // 原因：<a download> 只能写到浏览器下载根目录，无法携带 pathIndex，
             // 会导致基础保存目录/子保存目录对 WebP→PNG、canvas 提取的场景全部失效。
             // 走 background 才能让 buildDownloadPath() 拼接出正确的子目录路径。
+            // canvas 提取/WebP→PNG 的 blob 只能在 content 生成，仍需经消息传输；
+            // 大图可能超扩展消息上限，发送失败时明确反馈而非静默丢弃。
             const downloadBlob = (blob, finalFilename) => {
                 const reader = new FileReader();
                 reader.onloadend = () => {
@@ -180,25 +206,17 @@ async function downloadElement(element, pathIndex = -1) {
                         dataUrl: reader.result,
                         filename: finalFilename,
                         pathIndex: pathIndex
-                    }).catch(() => {});
-                    if (activeButton && activeButton.parentNode) {
-                        activeButton.innerHTML = '✅';
-                        setTimeout(() => {
-                            if (activeButton && activeButton.parentNode) {
-                                activeButton.innerHTML = activeButtonHtml;
-                                activeButton.title = 'Save image';
-                            }
-                        }, 2000);
-                    }
+                    }).then(markTriggered).catch((err) => {
+                        debug.error('Blob 下载消息发送失败:', err);
+                        reportFailure(finalFilename, err);
+                    });
                 };
                 reader.readAsDataURL(blob);
             };
 
             // === CANVAS 模式优先：canvas 模式意图是"强制 canvas 重编码"（绕过限制性站点、
-            // 统一转 PNG、丢 EXIF），与 fast path 的"保留原始格式"目的相反。
-            // 原实现把 canvas 提取放在 fast path 之后，导致 fast path 成功即 return，
-            // canvas 模式被架空、名不副实（下载到的还是原图原样）。
-            // 现将 canvas 提取提前：canvas 模式下先走提取，失败再回退到 fast path 等。
+            // 统一转 PNG、丢 EXIF），与直接下载的"保留原始格式"目的相反。
+            // canvas 模式下先走提取，失败再回退到 background 统一下载。
             if (downloadMode === 'canvas') {
                 try {
                     const canvasBlob = await extractImageToCanvas(element);
@@ -207,103 +225,17 @@ async function downloadElement(element, pathIndex = -1) {
                         downloadBlob(canvasBlob, filename);
                         return;
                     }
-                    debug.warn('Canvas extraction returned empty, falling back to fast path');
+                    debug.warn('Canvas extraction returned empty, falling back to background download');
                 } catch (e) {
-                    debug.warn('Canvas extraction failed, falling back to fast path', e);
+                    debug.warn('Canvas extraction failed, falling back to background download', e);
                 }
             }
 
-            // === FAST PATH: Try fetch first to preserve original format ===
-            // This gets the image in its original format (JPEG stays JPEG, GIF keeps animation, EXIF preserved)
-            // Falls back gracefully to normal download on CORS/network errors
-            if (!elementUrl.startsWith('data:')) {
-                try {
-                    debug.log('Fast path: attempting fetch for original format');
-                    const fetchResponse = await fetch(elementUrl);
-                    if (fetchResponse.ok) {
-                        const fetchedBlob = await fetchResponse.blob();
-                        if (fetchedBlob && fetchedBlob.size > 0) {
-                            // Try to derive correct extension from Content-Type or URL
-                            let fastFilename = filename;
-                            const contentType = fetchResponse.headers.get('Content-Type') || '';
-                            const typeMap = {
-                                'image/jpeg': '.jpg', 'image/png': '.png', 'image/gif': '.gif',
-                                'image/webp': '.webp', 'image/svg+xml': '.svg', 'image/bmp': '.bmp',
-                                'video/mp4': '.mp4', 'video/webm': '.webm', 'video/quicktime': '.mov'
-                            };
-
-                            // Use Content-Type extension if available and different from current filename extension
-                            if (contentType && typeMap[contentType]) {
-                                const correctExt = typeMap[contentType];
-                                // Only replace extension if filename doesn't already end with an equivalent one
-                                const currentExt = '.' + filename.split('.').pop().toLowerCase();
-                                const equivExts = { '.jpg': ['.jpeg'], '.jpeg': ['.jpg'] };
-                                const allowedEquivs = equivExts[currentExt] || [];
-                                if (currentExt !== correctExt.toLowerCase() && !allowedEquivs.includes(correctExt.toLowerCase())) {
-                                    fastFilename = filename.replace(/\.[^.]+$/, correctExt);
-                                }
-                            }
-
-                            debug.log('Fast path success: got blob', fetchedBlob.type, 'size:', fetchedBlob.size, 'as', fastFilename);
-
-                            // WebP→PNG 转换必须在此处拦截：fast path 成功后会 return，
-                            // 若不在此拦截，下方第 258 行的转换逻辑永远到不了，开关形同虚设。
-                            if (convertWebpToPng &&
-                                (contentType === 'image/webp' ||
-                                 elementUrl.toLowerCase().includes('.webp') ||
-                                 elementUrl.toLowerCase().includes('webp'))) {
-                                debug.log('WebP detected and conversion enabled (fast path)');
-                                try {
-                                    const pngBlob = await convertWebpImageToPng(element);
-                                    if (pngBlob) {
-                                        let pngFilename = fastFilename.replace(/\.(webp|WEBP)$/i, '.png');
-                                        if (!pngFilename.endsWith('.png')) {
-                                            pngFilename = pngFilename.replace(/\.[^.]+$/, '.png');
-                                        }
-                                        downloadBlob(pngBlob, pngFilename);
-                                        return;
-                                    }
-                                } catch (e) {
-                                    debug.warn('WebP conversion failed (fast path), falling back to original webp', e);
-                                }
-                            }
-
-                            // Send blob to background script for download with correct path
-                            // (background uses chrome.downloads.download which respects configured subfolder/pathIndex)
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                                chrome.runtime.sendMessage({
-                                    type: 'download_canvas_image',
-                                    dataUrl: reader.result,
-                                    filename: fastFilename,
-                                    pathIndex: pathIndex
-                                });
-                            };
-                            reader.readAsDataURL(fetchedBlob);
-
-                            if (activeButton && activeButton.parentNode) {
-                                activeButton.innerHTML = '✅';
-                                setTimeout(() => {
-                                    if (activeButton && activeButton.parentNode) {
-                                        activeButton.innerHTML = activeButtonHtml;
-                                        activeButton.title = 'Save image';
-                                    }
-                                }, 2000);
-                            }
-                            return;
-                        }
-                    } else {
-                        debug.log('Fast path: fetch returned status', fetchResponse.status, '- will fallback');
-                    }
-                } catch (fetchErr) {
-                    // CORS error or network failure — silently fall back to normal download
-                    debug.log('Fast path failed (likely CORS):', fetchErr.message || fetchErr, '- falling back');
-                }
-            }
-
-            // Check if we should convert WebP to PNG
-            if (convertWebpToPng && elementUrl &&
-                (elementUrl.toLowerCase().includes('.webp') || elementUrl.toLowerCase().includes('webp'))) {
+            // === WebP→PNG 转换（在 content 完成，blob 经 downloadBlob 传输）
+            // 注：仅按 URL 特征检测；URL 不含 webp 字样但响应实为 WebP 的图不再转换，
+            // 由 background 按 Content-Type 将扩展名修正为 .webp 原样保存。
+            if (convertWebpToPng && elementUrl && !elementUrl.startsWith('data:') &&
+                elementUrl.toLowerCase().includes('webp')) {
                 debug.log('WebP detected and conversion enabled');
                 try {
                     const pngBlob = await convertWebpImageToPng(element);
@@ -320,14 +252,21 @@ async function downloadElement(element, pathIndex = -1) {
                 }
             }
 
-            // Final fallback: Normal background download
+            // === 统一走 background 下载（SW fetch 无 CORS 限制、DNR referer 规则生效、
+            // 按 Content-Type 修正扩展名）。原 content fast path（页面内 fetch →
+            // FileReader base64 → sendMessage 巨型消息）已移除：大图消息易超扩展
+            // 消息上限且失败静默，是"大图连续下载偶发丢失"的根因；大图内容现在
+            // 全程留在 SW 内处理，不经过扩展消息通道。
             chrome.runtime.sendMessage({
                 type: 'download_image',
                 url: elementUrl,
                 filename: filename,
                 downloadMode: downloadMode,
                 pathIndex: pathIndex
-            }).catch(() => {});
+            }).then(markTriggered).catch((err) => {
+                debug.error('Download request failed:', err);
+                reportFailure(filename, err);
+            });
         });
 
     } catch (error) {

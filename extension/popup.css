@@ -134,7 +134,7 @@ header h1 {
     position: absolute;
     bottom: 0;
     left: 0;
-    width: 50%;
+    width: 33.333%;
     height: 2.5px;
     background: var(--accent);
     border-radius: 2px 2px 0 0;
@@ -142,6 +142,9 @@ header h1 {
 }
 .tab-track[data-active="advanced"] .tab-indicator {
     transform: translateX(100%);
+}
+.tab-track[data-active="downloads"] .tab-indicator {
+    transform: translateX(200%);
 }
 
 /* === 主内容区 === */
@@ -877,4 +880,103 @@ footer {
     padding: 1px 6px;
     border-radius: 4px;
     word-break: break-all;
+}
+
+/* === 下载记录列表 === */
+.dl-history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+.dl-history-header .card-title {
+    margin-bottom: 0;
+}
+.dl-clear-btn {
+    border: none;
+    background: transparent;
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 6px;
+    transition: color 0.2s ease, background 0.2s ease;
+}
+.dl-clear-btn:hover {
+    color: var(--danger);
+    background: var(--danger-light);
+}
+.dl-history-list {
+    margin-top: 8px;
+    max-height: 360px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--accent-rgb), 0.18) transparent;
+}
+.dl-empty {
+    padding: 18px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+.dl-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 4px;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s ease;
+}
+.dl-item:hover {
+    background: var(--surface-dim);
+}
+.dl-item + .dl-item {
+    margin-top: 2px;
+}
+.dl-dot {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+}
+.dl-pending .dl-dot {
+    background: var(--accent);
+    animation: dlPulse 1.2s ease-in-out infinite;
+}
+.dl-success .dl-dot {
+    background: var(--success);
+}
+.dl-failed .dl-dot {
+    background: var(--danger);
+}
+@keyframes dlPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+.dl-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.dl-failed .dl-name {
+    color: var(--danger);
+}
+/* 失败条目可点击重试：hover 给出可操作暗示 */
+.dl-failed {
+    cursor: pointer;
+}
+.dl-failed:hover {
+    background: var(--danger-light);
+}
+.dl-failed:hover .dl-name {
+    text-decoration: underline;
+}
+.dl-time {
+    flex: none;
+    font-size: 10px;
+    color: var(--text-muted);
 }

@@ -173,6 +173,9 @@ async function initializePopup() {
         // Set up additional event listeners
         setupImageDetectionListeners();
 
+        // Set up download history tab
+        setupDownloadHistory();
+
         // Set up language selector listener
         setupLanguageSelectorListener();
 
@@ -212,6 +215,170 @@ function setupTabSwitching() {
             switchToTab(btn.dataset.tab);
         });
     });
+}
+
+// ===== 下载记录（近期下载列表）=====
+// 数据由 background 写入 storage.local（ih_download_history），
+// 触发"开始下载"即记 pending，downloads.onChanged 终结为 success/failed。
+const DL_HISTORY_KEY = 'ih_download_history';
+
+// 相对时间：10 分钟内显示"刚刚/N 分钟前"，超过 10 分钟显示具体日期
+// （跨年带年份的 MM-DD HH:mm）
+function formatRelativeTime(ts) {
+    const diff = Date.now() - ts;
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return i18n.t('dlTimeJustNow');
+    if (min <= 10) return i18n.tf('dlTimeMinutesAgo', { n: min });
+
+    const d = new Date(ts);
+    const now = new Date();
+    const pad = (v) => String(v).padStart(2, '0');
+    const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    if (d.getFullYear() !== now.getFullYear()) {
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm}`;
+    }
+    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hm}`;
+}
+
+// 对 pending 记录用 chrome.downloads.search 主动校正状态：
+// 弥补 background SW 休眠期间丢失的 onChanged 终态事件（大图/慢下载常见）。
+// 返回是否发生了状态修正。
+async function reconcilePendingFromPopup(list) {
+    let changed = false;
+    for (const rec of list) {
+        if (rec.status !== 'pending' || rec.downloadId == null) continue;
+        try {
+            const items = await chrome.downloads.search({ id: rec.downloadId });
+            if (items.length === 1) {
+                const state = items[0].state;
+                if (state === 'complete') {
+                    rec.status = 'success';
+                    changed = true;
+                } else if (state === 'interrupted') {
+                    rec.status = 'failed';
+                    rec.error = items[0].error || 'INTERRUPTED';
+                    changed = true;
+                }
+            } else {
+                rec.status = 'failed';
+                rec.error = 'DOWNLOAD_ITEM_NOT_FOUND';
+                changed = true;
+            }
+        } catch (e) {
+            diag.error('popup 校正下载记录失败:', e);
+        }
+    }
+    return changed;
+}
+
+async function renderDownloadHistory() {
+    const listEl = document.getElementById('downloadHistoryList');
+    if (!listEl) return;
+
+    let list = [];
+    try {
+        const data = await chrome.storage.local.get(DL_HISTORY_KEY);
+        list = Array.isArray(data[DL_HISTORY_KEY]) ? data[DL_HISTORY_KEY] : [];
+    } catch (e) {
+        diag.error('读取下载记录失败:', e);
+    }
+
+    // 即时校正：查询浏览器真实下载状态并写回
+    if (await reconcilePendingFromPopup(list)) {
+        try {
+            await chrome.storage.local.set({ [DL_HISTORY_KEY]: list });
+        } catch (e) {
+            diag.error('保存 popup 校正结果失败:', e);
+        }
+    }
+
+    listEl.innerHTML = '';
+
+    if (list.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'dl-empty';
+        empty.textContent = i18n.t('downloadHistoryEmpty');
+        listEl.appendChild(empty);
+        return;
+    }
+
+    list.forEach(rec => {
+        const statusKey = rec.status === 'success' ? 'downloadStatusSuccess'
+            : rec.status === 'failed' ? 'downloadStatusFailed'
+            : 'downloadStatusPending';
+
+        const item = document.createElement('div');
+        item.className = 'dl-item dl-' + (rec.status || 'pending');
+
+        const dot = document.createElement('span');
+        dot.className = 'dl-dot';
+        dot.title = i18n.t(statusKey);
+
+        const name = document.createElement('span');
+        name.className = 'dl-name';
+        name.textContent = rec.filename || 'media';
+
+        const time = document.createElement('span');
+        time.className = 'dl-time';
+        time.textContent = formatRelativeTime(rec.ts || Date.now());
+
+        item.appendChild(dot);
+        item.appendChild(name);
+        item.appendChild(time);
+
+        // 悬停可见完整信息：来源 URL + 失败原因（含重试提示）
+        const errLine = rec.status === 'failed'
+            ? `\n${i18n.t('downloadStatusFailed')}: ${rec.error || 'unknown'}\n${i18n.t('retryHint')}`
+            : '';
+        item.title = `${rec.filename || ''}\n${rec.url || ''}${errLine}`;
+
+        // 点击重试：仅失败记录且 URL 为可再次下载的 http(s) 地址时可用
+        // （data:/blob: 是页面内转换产物，脱离页面上下文无法重建）
+        item.addEventListener('click', async () => {
+            if (rec.status !== 'failed') return;
+            if (!rec.url || rec.url.startsWith('data:') || rec.url.startsWith('blob:')) {
+                showStatus(i18n.t('retryNotAvailable'), 'error');
+                return;
+            }
+            try {
+                await chrome.runtime.sendMessage({
+                    type: 'retry_download',
+                    url: rec.url,
+                    filename: rec.filename || 'media',
+                    mode: rec.mode || 'normal',
+                    pathIndex: (rec.pathIndex != null ? rec.pathIndex : -1)
+                });
+                showStatus(i18n.tf('statusRetryQueued', { name: rec.filename || '' }), 'success');
+            } catch (e) {
+                diag.error('发送重试请求失败:', e);
+                showStatus(i18n.t('statusSaveFailed'), 'error');
+            }
+        });
+
+        listEl.appendChild(item);
+    });
+}
+
+function setupDownloadHistory() {
+    renderDownloadHistory();
+
+    // popup 打开期间后台持续更新记录（状态 pending→success/failed），实时刷新
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes[DL_HISTORY_KEY]) {
+            renderDownloadHistory();
+        }
+    });
+
+    const clearBtn = document.getElementById('clearHistoryBtn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', async () => {
+            try {
+                await chrome.storage.local.set({ [DL_HISTORY_KEY]: [] });
+            } catch (e) {
+                diag.error('清空下载记录失败:', e);
+            }
+        });
+    }
 }
 
 // Set up download mode UI

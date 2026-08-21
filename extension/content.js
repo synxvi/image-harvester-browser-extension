@@ -205,6 +205,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
     }
 
+    // 下载失败通知（来自 background.js：下载中断或下载请求本身失败）
+    if (message.type === 'download_failed') {
+        showPageToast('toastDownloadFailed', 'error');
+        return;
+    }
+
     debug.log('Unknown message type:', message.type);
 });
 
@@ -305,9 +311,18 @@ function triggerHoverDetection(rawElement) {
     }
 
     // 已激活快速跟随：若用户此前已在某图片上停留足够久、下载按钮已显示
-    // （currentImage 指向旧图且按钮仍在 DOM），此时鼠标移到另一张图
-    // （如点击缩略图弹出大图），不再重跑完整 hoverDelay，而是立即弹出按钮。
-    const alreadyActive = !!(downloadButton && currentImage && downloadButton.parentNode);
+    // （currentImage 指向旧图且按钮仍在 DOM），且光标仍位于旧图的矩形范围内，
+    // 视为同一悬停的延续而非全新悬停——典型场景：点击缩略图后 lightbox 大图
+    // 在光标下弹出（DOM 目标更替、光标未动）、快速移出后又立刻回到同一张图
+    // （hide 延迟尚未结束）。此时不再重跑完整 hoverDelay，而是立即弹出按钮。
+    // 反之若光标已移出旧图（如滑到相邻的下一张图片），则是一次真实的换图，
+    // 必须重新走完整 hoverDelay，避免按钮在旧图隐藏前「跳变」到新图上立即出现。
+    const oldRect = (downloadButton && currentImage && downloadButton.parentNode)
+        ? currentImage.getBoundingClientRect()
+        : null;
+    const alreadyActive = !!oldRect
+        && lastCursorX >= oldRect.left && lastCursorX <= oldRect.right
+        && lastCursorY >= oldRect.top && lastCursorY <= oldRect.bottom;
 
     // Set timer for download button
     hoverTimer = setTimeout(() => {
@@ -531,6 +546,16 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 
 // Set up event listeners
+// 记录最新光标位置（视口坐标）。mouseenter 事件在「新标签页加载完成时光标
+// 已静止/移动中大图区域内」时不会可靠触发，需要用光标位置主动命中检测；
+// triggerHoverDetection 也用它判断光标是否仍在旧图矩形内（快速跟随条件）。
+let lastCursorX = -1;
+let lastCursorY = -1;
+document.addEventListener('mousemove', (e) => {
+    lastCursorX = e.clientX;
+    lastCursorY = e.clientY;
+}, true);
+
 document.addEventListener('mouseenter', handleMouseEnter, true);
 document.addEventListener('mouseleave', handleMouseLeave, true);
 
@@ -609,15 +634,6 @@ window.addEventListener('resize', () => {
 });
 
 // ===== 页面加载时光标已在图片上的兜底检测 =====
-// 记录最新光标位置（视口坐标）。mouseenter 事件在「新标签页加载完成时光标
-// 已静止/移动中大图区域内」时不会可靠触发，需要用光标位置主动命中检测。
-let lastCursorX = -1;
-let lastCursorY = -1;
-document.addEventListener('mousemove', (e) => {
-    lastCursorX = e.clientX;
-    lastCursorY = e.clientY;
-}, true);
-
 // 在光标位置进行命中测试，找到最顶层可下载元素并触发悬停检测。
 // 返回是否命中了可检测元素（供加载兜底判断是否需要继续重试）。
 function detectHoverAtCursor() {
