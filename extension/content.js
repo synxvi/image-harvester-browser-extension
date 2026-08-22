@@ -199,15 +199,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 
-    // 下载完成通知（来自 background.js）
+    // 下载完成通知（来自 background.js，携带最终文件名）
     if (message.type === 'download_complete') {
-        showPageToast('toastDownloadComplete', 'done');
+        showPageToast('toastDownloadComplete', 'done', message.filename || '');
         return;
     }
 
     // 下载失败通知（来自 background.js：下载中断或下载请求本身失败）
     if (message.type === 'download_failed') {
-        showPageToast('toastDownloadFailed', 'error');
+        showPageToast('toastDownloadFailed', 'error', message.filename || '');
         return;
     }
 

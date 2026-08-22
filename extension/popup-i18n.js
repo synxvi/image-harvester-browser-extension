@@ -153,13 +153,14 @@ const i18n = {
             galleryNoImagesToDownload: 'No images to download',
             galleryCreatingZip: 'Creating ZIP file...',
             galleryGeneratingZip: 'Generating ZIP file...',
+            galleryProgress: 'Fetched {n}/{total} images',
             galleryZipDownloaded: 'ZIP downloaded with {count} images',
             galleryZipFailed: 'Failed to create ZIP file',
             galleryImageAlt: 'Image {index}',
 
             // Multi-path download
             multiPathEnableLabel: 'Sub save directories',
-            multiPathHelp: 'Each path shows as separate button. Normal mode only.',
+            multiPathHelp: 'Each path shows as separate button.',
             addPathBtn: '+ Add Path',
             pathNamePlaceholder: 'e.g. Photos',
             pathFolderPlaceholder: 'folder-name',
@@ -189,6 +190,40 @@ const i18n = {
             statusRetryQueued: 'Retrying: {name}',
             retryNotAvailable: 'Cannot retry (re-encoded in page)',
             retryHint: 'Click to retry',
+            openFolderHint: 'Click to open folder',
+            openFolderMissing: 'File not found (moved or deleted)',
+            dlSourceTitle: 'Downloaded via',
+            dlSourceHover: 'Hover',
+            dlSourceContext: 'Right-click',
+            dlSourceZip: 'ZIP',
+            dlSourceGallery: 'Gallery',
+            dlSourceBrowser: 'Browser',
+            dlSourceOther: 'Other',
+            dlRetryAllFailed: 'Retry failed',
+            appearanceSection: 'Appearance:',
+            themeLabel: 'Theme:',
+            themeDark: 'Dark',
+            themeLight: 'Light',
+            themeSystem: 'System',
+            hoverVisualFeedback: 'Hover visual feedback',
+            statusDomainExcluded: 'Domain excluded — hover download disabled',
+            templatePreviewLabel: 'Preview',
+            templatePreviewEmpty: 'filename preview appears here…',
+            gallerySelectVisible: 'Select visible',
+            galleryClearSelection: 'Clear selection',
+            galleryDownloadSelected: '⬇ Download selected',
+            galleryZipSelected: '🗜 Zip selected',
+            galleryStatsLine: 'Total {total} · Visible {visible} · Selected {selected}',
+            galleryQueued: 'Queued {n} downloads',
+            galleryEmptyData: 'No scan data found — reopen the gallery from the extension popup.',
+            zipConfirm: 'Package {count} images into a ZIP and download?',
+            zipCancel: 'Cancel',
+            zipCancelling: 'Cancelling after current image...',
+            zipAborted: 'ZIP download cancelled',
+            zipPartialConfirm: 'Cancelled. Still package the {count} images already fetched?',
+            zipDoneClean: 'ZIP saved ({ok} images)',
+            zipDoneSummary: 'ZIP saved: {ok} images, {skip} skipped',
+            zipRecordNote: '{ok} ok, {skip} skipped',
 
             // Filename template & provenance (task 2)
             namingProvenanceTitle: 'Filename template & provenance',
@@ -344,13 +379,14 @@ const i18n = {
             galleryNoImagesToDownload: '\u6CA1\u6709\u9700\u8981\u4E0B\u8F7D\u7684\u56FE\u7247',
             galleryCreatingZip: '\u6B63\u5728\u521B\u5EFA ZIP \u6587\u4EF6...',
             galleryGeneratingZip: '\u6B63\u5728\u751F\u6210 ZIP \u6587\u4EF6...',
+            galleryProgress: '已获取 {n}/{total} 张图片',
             galleryZipDownloaded: 'ZIP \u5DF2\u4E0B\u8F7D\uFF0C\u5171 {count} \u5F20\u56FE\u7247',
             galleryZipFailed: '\u521B\u5EFA ZIP \u6587\u4EF6\u5931\u8D25',
             galleryImageAlt: '\u56FE\u7247 {index}',
 
             // Multi-path download
             multiPathEnableLabel: '子保存目录',
-            multiPathHelp: '\u5404\u8DEF\u5F84\u5206\u522B\u663E\u793A\u4E3A\u72EC\u7ACB\u6309\u94AE\uFF0C\u4EC5\u666E\u901A\u4E0B\u8F7D\u6A21\u5F0F\u751F\u6548\u3002',
+            multiPathHelp: '\u5404\u8DEF\u5F84\u5206\u522B\u663E\u793A\u4E3A\u72EC\u7ACB\u6309\u94AE\u3002',
             addPathBtn: '+ \u65B0\u589E\u8DEF\u5F84',
             pathNamePlaceholder: '\u5982\uFF1A\u7167\u7247',
             pathFolderPlaceholder: '\u76EE\u5F55\u540D',
@@ -380,6 +416,40 @@ const i18n = {
             statusRetryQueued: '\u6B63\u5728\u91CD\u8BD5\uFF1A{name}',
             retryNotAvailable: '\u65E0\u6CD5\u91CD\u8BD5\uFF08\u8BE5\u56FE\u7247\u9700\u5728\u9875\u9762\u5185\u91CD\u65B0\u8F6C\u6362\uFF09',
             retryHint: '\u70B9\u51FB\u91CD\u8BD5',
+            openFolderHint: '点击打开所在目录',
+            openFolderMissing: '文件已被移动或删除，无法打开所在目录',
+            dlSourceTitle: '下载方式',
+            dlSourceHover: '悬浮',
+            dlSourceContext: '右键',
+            dlSourceZip: 'ZIP',
+            dlSourceGallery: '画廊',
+            dlSourceBrowser: '浏览器',
+            dlSourceOther: '其他',
+            dlRetryAllFailed: '重试全部失败',
+            appearanceSection: '外观：',
+            themeLabel: '主题：',
+            themeDark: '深色',
+            themeLight: '浅色',
+            themeSystem: '跟随系统',
+            hoverVisualFeedback: '悬浮视觉反馈',
+            statusDomainExcluded: '当前域名已排除，悬停下载不可用',
+            templatePreviewLabel: '预览',
+            templatePreviewEmpty: '文件名预览将显示在这里…',
+            gallerySelectVisible: '全选可见',
+            galleryClearSelection: '清除勾选',
+            galleryDownloadSelected: '⬇ 下载选中',
+            galleryZipSelected: '🗜 打包选中',
+            galleryStatsLine: '共 {total} 张 · 可见 {visible} · 已选 {selected}',
+            galleryQueued: '已加入下载队列 {n} 张',
+            galleryEmptyData: '未找到扫描数据，请从扩展弹窗重新打开画廊。',
+            zipConfirm: '将扫描到的 {count} 张图片打包为 ZIP 并下载？',
+            zipCancel: '取消',
+            zipCancelling: '将在当前图片后取消…',
+            zipAborted: '已取消 ZIP 下载',
+            zipPartialConfirm: '已取消。仍打包已获取的 {count} 张图片？',
+            zipDoneClean: 'ZIP 已保存（共 {ok} 张）',
+            zipDoneSummary: 'ZIP 已保存：成功 {ok} 张，跳过 {skip} 张',
+            zipRecordNote: '成功 {ok} 张，跳过 {skip} 张',
 
             // Filename template & provenance (task 2)
             namingProvenanceTitle: '命名模板与溯源',
@@ -448,12 +518,6 @@ const i18n = {
             el.placeholder = this.t(key);
         });
 
-        // Update language selector option texts
-        const optionEls = document.querySelectorAll('#languageSelect option[data-i18n]');
-        optionEls.forEach(opt => {
-            const key = opt.getAttribute('data-i18n');
-            opt.textContent = this.t(key);
-        });
         diag.log('applyToDOM done');
     },
 
@@ -465,12 +529,11 @@ const i18n = {
             this.currentLocale = saved || 'auto';
             diag.log('i18n.init() saved language from storage:', saved, ', currentLocale set to:', this.currentLocale);
 
+            // 旧版下拉选择器已由分段滑块替代（popup.js 的 setupLanguageSelectorListener
+            // 负责 UI 初始化），此处找不到 #languageSelect 属正常，静默跳过
             const select = document.getElementById('languageSelect');
             if (select) {
                 select.value = this.currentLocale;
-                diag.log('i18n.init() select element found, value set to:', this.currentLocale);
-            } else {
-                diag.error('i18n.init() #languageSelect NOT FOUND in DOM!');
             }
 
             this.applyToDOM();

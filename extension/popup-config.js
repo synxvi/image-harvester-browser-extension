@@ -6,7 +6,7 @@
 // Loaded as classic <script> tags sharing global scope (project convention).
 
 // Extension version - update this when releasing new versions
-const EXTENSION_VERSION = '1.6.5';
+const EXTENSION_VERSION = '1.7.0';
 
 // Debug flag - set to false to disable all console output
 const DEBUG = false;

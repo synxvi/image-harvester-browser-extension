@@ -2,7 +2,7 @@
 // Copyright (c) Jaewoo Jeon (@thejjw) and Image Harvester Contributors
 // SPDX-License-Identifier: zlib-acknowledgement
 
-const EXTENSION_VERSION = '1.6.5';
+const EXTENSION_VERSION = '1.7.0';
 
 const DEBUG = false;
 
@@ -498,9 +498,10 @@ class UrlStrategies {
             this.importStrategies(e);
         });
 
-        // 返回按钮
+        // 返回按钮：window.close() 对 tabs.create 打开的标签页不生效，
+        // 改为把当前标签导航到扩展设置页（popup 的整页形态）
         document.getElementById('back-btn').addEventListener('click', () => {
-            window.close();
+            chrome.tabs.update({ url: chrome.runtime.getURL('popup.html') });
         });
     }
 
@@ -805,6 +806,14 @@ class UrlStrategies {
 
 // 初始化
 document.addEventListener('DOMContentLoaded', async () => {
+    // 应用主题（ih_theme 手动覆盖 / 跟随系统由 CSS media 查询处理）
+    try {
+        const d = await chrome.storage.sync.get('ih_theme');
+        if (d.ih_theme === 'light' || d.ih_theme === 'dark') {
+            document.documentElement.dataset.theme = d.ih_theme;
+        }
+    } catch (e) { /* 忽略 */ }
+
     const versionElement = document.getElementById('version');
     if (versionElement) {
         versionElement.textContent = `v${EXTENSION_VERSION}`;

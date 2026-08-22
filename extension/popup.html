@@ -13,13 +13,6 @@
                 <img src="icons/icon32.png" alt="" class="header-icon">
                 <h1 data-i18n="headerTitle">Image Harvester</h1>
             </div>
-            <div class="header-right">
-                <select id="languageSelect" title="Language">
-                    <option value="auto" data-i18n="langAuto">🌐 Auto</option>
-                    <option value="en" data-i18n="langEnglish">EN</option>
-                    <option value="zh_CN" data-i18n="langChinese">CN</option>
-                </select>
-            </div>
         </header>
 
         <nav class="tab-nav">
@@ -112,8 +105,8 @@
                 <!-- 基础保存目录 -->
                 <section class="card">
                     <label class="card-title" for="baseSubfolder" data-i18n="baseSubfolderLabel">Base save directory:</label>
-                    <input type="text" id="baseSubfolder" placeholder="image (optional)" data-i18n-placeholder="baseSubfolderPlaceholder">
                     <p class="help-text" data-i18n="baseSubfolderHelp">A parent folder inside Downloads. All paths will be created under this directory.</p>
+                    <input type="text" id="baseSubfolder" placeholder="image (optional)" data-i18n-placeholder="baseSubfolderPlaceholder">
                 </section>
 
                 <!-- 子保存目录 -->
@@ -134,9 +127,54 @@
 
             <!-- ====== 高级设置 ====== -->
             <div class="tab-pane" id="tab-advanced">
-                <!-- 视觉反馈 -->
+                <!-- 外观：语言 / 主题 / 悬浮视觉反馈 -->
                 <section class="card">
-                    <div class="card-title" data-i18n="visualFeedback">Visual feedback</div>
+                    <div class="card-title" data-i18n="appearanceSection">Appearance</div>
+
+                    <div class="appearance-row">
+                        <span class="interaction-label" data-i18n="langLabel">Language:</span>
+                        <div class="seg-slider" id="langSegment">
+                            <div class="seg-slider-thumb" aria-hidden="true"></div>
+                            <label class="seg-item">
+                                <input type="radio" name="ihLang" id="langAuto" value="auto">
+                                <span data-i18n="langAuto">🌐 Auto</span>
+                            </label>
+                            <label class="seg-item">
+                                <input type="radio" name="ihLang" id="langEn" value="en">
+                                <span data-i18n="langEnglish">EN</span>
+                            </label>
+                            <label class="seg-item">
+                                <input type="radio" name="ihLang" id="langZh" value="zh_CN">
+                                <span data-i18n="langChinese">CN</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="card-divider"></div>
+
+                    <div class="appearance-row">
+                        <span class="interaction-label" data-i18n="themeLabel">Theme:</span>
+                        <div class="seg-slider" id="themeSegment">
+                            <div class="seg-slider-thumb" aria-hidden="true"></div>
+                            <label class="seg-item">
+                                <input type="radio" name="ihTheme" id="themeAuto" value="auto" checked>
+                                <span data-i18n="themeSystem">System</span>
+                            </label>
+                            <label class="seg-item">
+                                <input type="radio" name="ihTheme" id="themeLight" value="light">
+                                <span data-i18n="themeLight">Light</span>
+                            </label>
+                            <label class="seg-item">
+                                <input type="radio" name="ihTheme" id="themeDark" value="dark">
+                                <span data-i18n="themeDark">Dark</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="card-divider"></div>
+
+                    <div class="card-title card-title-sub" data-i18n="hoverVisualFeedback">Hover visual feedback</div>
+                    <p class="help-text" data-i18n="visualFeedbackHelp">Show border around images when hovering</p>
                     <div class="radio-group">
                         <label class="radio-label">
                             <input type="radio" name="borderHighlight" id="borderHighlightOff" value="off" checked>
@@ -148,7 +186,6 @@
                             <input type="color" id="borderHighlightColor" value="#e6a100" class="border-color-picker">
                         </label>
                     </div>
-                    <p class="help-text" data-i18n="visualFeedbackHelp">Show border around images when hovering</p>
                     <div class="card-divider"></div>
                     <div class="interaction-control">
                         <span class="interaction-label" data-i18n="glowDelayLabel">Glow delay:</span>
@@ -177,6 +214,10 @@
                         <button type="button" class="placeholder-chip separator-chip" data-sep=" " data-i18n="separatorSpace">space</button>
                     </div>
                     <p class="help-text" data-i18n="filenameTemplateHelp">Empty = use default naming. Leave it blank to disable.</p>
+                    <p class="help-text template-preview-row">
+                        <span data-i18n="templatePreviewLabel">Preview</span>:
+                        <code class="template-preview" id="templatePreview"></code>
+                    </p>
                 </section>
 
                 <!-- 下载模式 -->
@@ -255,7 +296,10 @@
                 <section class="card">
                     <div class="dl-history-header">
                         <span class="card-title" data-i18n="downloadHistoryTitle">Recent downloads</span>
-                        <button type="button" class="dl-clear-btn" id="clearHistoryBtn" data-i18n="clearDownloadHistory">Clear</button>
+                        <div class="dl-header-actions">
+                            <button type="button" class="dl-clear-btn dl-retry-all" id="retryAllBtn" data-i18n="dlRetryAllFailed" hidden>Retry failed</button>
+                            <button type="button" class="dl-clear-btn" id="clearHistoryBtn" data-i18n="clearDownloadHistory">Clear</button>
+                        </div>
                     </div>
                     <p class="help-text" data-i18n="downloadHistoryHelp">Records of downloads triggered from this browser</p>
                     <div id="downloadHistoryList" class="dl-history-list"></div>

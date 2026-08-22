@@ -19,7 +19,7 @@ function getToastContainer() {
     return toastContainer;
 }
 
-function showPageToast(messageKey, type = 'start') {
+function showPageToast(messageKey, type = 'start', detail = '') {
     const container = getToastContainer();
     const toast = document.createElement('div');
     toast.className = `ih-toast ih-toast-${type}`;
@@ -35,7 +35,11 @@ function showPageToast(messageKey, type = 'start') {
     const table = translations[locale] || translations.en;
     const text = table[messageKey] || translations.en[messageKey] || messageKey;
 
-    toast.innerHTML = `<span class="ih-toast-text">${text}</span>`;
+    // detail（文件名等）来自页面数据，用 textContent 避免 innerHTML 注入
+    const span = document.createElement('span');
+    span.className = 'ih-toast-text';
+    span.textContent = detail ? `${text} - ${detail}` : text;
+    toast.appendChild(span);
     container.appendChild(toast);
 
     // 2.5秒后自动消失
@@ -47,11 +51,65 @@ function showPageToast(messageKey, type = 'start') {
     }, 2500);
 }
 
+// ====== srcset / 懒加载增强取 URL ======
+// 现代站点常把高清档写在 srcset、把真实地址放在 data-* 属性（src 仅为低清占位
+// 或 1px 占位图）。下载/扫描前优先取「宽度最大的候选」，避免存下缩略图。
+
+// 常见懒加载库的真实图地址属性（按可信度排序）
+const LAZY_SRC_ATTRIBUTES = ['data-src', 'data-original', 'data-lazy-src', 'data-actualsrc', 'data-echo', 'data-url'];
+
+function isValidMediaUrl(url) {
+    return !!url && /^(https?:|data:|blob:)/i.test(url.trim());
+}
+
+function absolutizeUrl(url, base) {
+    try {
+        return new URL(url.trim(), base).href;
+    } catch {
+        return null;
+    }
+}
+
+// 解析 srcset（含懒加载库常写的 data-srcset），返回宽度/倍率最大的候选；
+// 候选无描述符时无从比较，返回 null 交由后续回退处理。
+function pickBestFromSrcset(el) {
+    const raw = el.getAttribute('srcset') || el.getAttribute('data-srcset');
+    if (!raw) return null;
+    let best = null;
+    for (const part of raw.split(',')) {
+        const seg = part.trim().split(/\s+/);
+        if (!seg[0]) continue;
+        const desc = seg[1] || '';
+        let score = -1;
+        if (/^\d+w$/i.test(desc)) score = parseFloat(desc);
+        else if (/^\d+(\.\d+)?x$/i.test(desc)) score = parseFloat(desc) * 1000; // DPR 档近似映射到宽度区间
+        if (score < 0) continue;
+        if (!best || score > best.score) best = { url: seg[0], score };
+    }
+    if (!best) return null;
+    return absolutizeUrl(best.url, el.baseURI || window.location.href);
+}
+
+// 懒加载属性回退：属性值有效且与 src 不同时优先（src 是占位图）
+function pickLazyLoadedUrl(el) {
+    const currentSrc = (el.getAttribute('src') || '').trim();
+    for (const attr of LAZY_SRC_ATTRIBUTES) {
+        const v = el.getAttribute(attr);
+        if (isValidMediaUrl(v) && v.trim() !== currentSrc) {
+            const abs = absolutizeUrl(v, el.baseURI || window.location.href);
+            if (abs) return abs;
+        }
+    }
+    return null;
+}
+
+// IMG 的增强取 URL：srcset 最大档 > 懒加载属性 > currentSrc/src
+function getEnhancedImageUrl(img) {
+    return pickBestFromSrcset(img) || pickLazyLoadedUrl(img) || img.currentSrc || img.src || null;
+}
+
 // Download image or video
 async function downloadElement(element, pathIndex = -1) {
-    // 下载开始通知
-    showPageToast('toastDownloadStart', 'start');
-
     // 快照当前按钮引用：异步回调只操作此快照，避免竞态条件
     // （用户可能在下载期间重新悬停图片，downloadButton 已指向新按钮）
     const activeButton = downloadButton;
@@ -63,7 +121,8 @@ async function downloadElement(element, pathIndex = -1) {
 
         // Get element URL based on type
         if (element.tagName === 'IMG') {
-            elementUrl = element.src;
+            // srcset 最大档 / 懒加载属性优先，避免下到低清占位图
+            elementUrl = getEnhancedImageUrl(element);
             defaultExtension = 'jpg';
         } else if (element.tagName === 'VIDEO') {
             // For video elements, try src first, then currentSrc, then first source element
@@ -163,6 +222,9 @@ async function downloadElement(element, pathIndex = -1) {
             debug.warn('命名模板处理失败，降级到默认文件名', tplErr);
         }
 
+        // 下载开始通知（待文件名确定后再提示，可附带原始文件名）
+        showPageToast('toastDownloadStart', 'start', filename);
+
         // Send download request to background script
         chrome.storage.sync.get(['ih_download_mode'], async (result) => {
             const downloadMode = result.ih_download_mode || 'normal';
@@ -182,7 +244,7 @@ async function downloadElement(element, pathIndex = -1) {
 
             // 下载请求失败反馈：页面红色 toast + 通知 background 补记失败记录
             const reportFailure = (finalFilename, err) => {
-                showPageToast('toastDownloadFailed', 'error');
+                showPageToast('toastDownloadFailed', 'error', finalFilename || filename);
                 chrome.runtime.sendMessage({
                     type: 'record_download_failed',
                     filename: finalFilename || filename,
@@ -327,11 +389,13 @@ function getAllImages(settings = {}) {
     if (detectImgLocal) {
         const imgElements = document.querySelectorAll('img');
         imgElements.forEach(img => {
-            if (img.src && hasAllowedExtension(img.src)) {
+            // 与单图下载同源：srcset 最大档 / 懒加载属性优先
+            const url = getEnhancedImageUrl(img);
+            if (url && hasAllowedExtension(url)) {
                 const rect = img.getBoundingClientRect();
                 if (rect.width >= minImageSize && rect.height >= minImageSize) {
                     images.push({
-                        url: img.src,
+                        url: url,
                         type: 'img',
                         alt: img.alt || '',
                         width: rect.width,

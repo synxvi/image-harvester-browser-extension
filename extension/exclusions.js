@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: zlib-acknowledgement
 
 // Extension version - should match popup.js
-const EXTENSION_VERSION = '1.6.5';
+const EXTENSION_VERSION = '1.7.0';
 
 // Debug flag
 const DEBUG = false;
@@ -207,9 +207,10 @@ class DomainExclusions {
             addBtn.disabled = !value || this.exclusions.includes(value);
         });
 
-        // Back button
+        // Back button：window.close() 对 tabs.create 打开的标签页不生效，
+        // 改为把当前标签导航到扩展设置页（popup 的整页形态）
         backBtn.addEventListener('click', () => {
-            window.close();
+            chrome.tabs.update({ url: chrome.runtime.getURL('popup.html') });
         });
     }
 
@@ -319,6 +320,15 @@ class DomainExclusions {
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+    // 应用主题（ih_theme 手动覆盖 / 跟随系统由 CSS media 查询处理）
+    try {
+        chrome.storage.sync.get('ih_theme').then(d => {
+            if (d.ih_theme === 'light' || d.ih_theme === 'dark') {
+                document.documentElement.dataset.theme = d.ih_theme;
+            }
+        });
+    } catch (e) { /* 忽略 */ }
+
     debug.log('Initializing domain exclusions page...');
 
     // Populate version in footer

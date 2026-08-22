@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Harvester Gallery</title>
+    <link rel="stylesheet" href="gallery.css">
+</head>
+<body>
+    <header class="gallery-header">
+        <h1 id="galleryTitle">Gallery</h1>
+        <p class="gallery-stats" id="galleryStats"></p>
+        <p class="gallery-tip" data-i18n="galleryTip"></p>
+    </header>
+
+    <main class="gallery-controls">
+        <div class="g-status hidden" id="status" role="status"></div>
+
+        <div class="filter-section">
+            <label data-i18n="galleryFilterBySize"></label>
+            <div class="size-filter">
+                <span data-i18n="galleryWidth"></span>
+                <input type="number" id="minWidth" placeholder="Min" min="0">
+                <span>-</span>
+                <input type="number" id="maxWidth" placeholder="Max" min="0">
+                <span data-i18n="galleryHeight"></span>
+                <input type="number" id="minHeight" placeholder="Min" min="0">
+                <span>-</span>
+                <input type="number" id="maxHeight" placeholder="Max" min="0">
+            </div>
+        </div>
+
+        <div class="filter-section">
+            <label data-i18n="galleryFilterByExt"></label>
+            <div class="extension-filters" id="extFilters"></div>
+        </div>
+
+        <div class="action-buttons">
+            <button class="btn btn-secondary" id="resetFiltersBtn" data-i18n="galleryResetFilters"></button>
+            <button class="btn btn-secondary" id="selectAllBtn" data-i18n="gallerySelectVisible"></button>
+            <button class="btn btn-secondary" id="clearSelectionBtn" data-i18n="galleryClearSelection"></button>
+            <button class="btn btn-primary" id="downloadSelectedBtn" data-i18n="galleryDownloadSelected"></button>
+            <button class="btn btn-primary" id="zipSelectedBtn" data-i18n="galleryZipSelected"></button>
+        </div>
+    </main>
+
+    <div class="gallery" id="gallery"></div>
+
+    <footer class="gallery-footer">
+        <p id="footerLine1"></p>
+        <p class="italic" data-i18n="galleryFooterLine2"></p>
+    </footer>
+
+    <script src="popup-i18n.js"></script>
+    <script src="jszip.min.js"></script>
+    <script src="gallery.js"></script>
+</body>
+</html>

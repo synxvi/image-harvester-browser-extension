@@ -18,9 +18,6 @@ const CONFIG = {
     DEFAULT_HOVER_DELAY: 1000
 };
 
-let dynamicRuleIdCount = 1000;
-const hostnameToRuleId = new Map();
-
 // Helper: update badge for specific tab
 // 注意：MV3 下无回调调用返回 Promise；badge 更新是异步的，回调执行时
 // tab 可能已关闭，reject 的 promise 不 catch 会成为 unhandled rejection
@@ -80,15 +77,23 @@ chrome.runtime.onInstalled.addListener((details) => {
     });
     
     debug.log('Extension installed, default settings applied');
-    
-    // Clear all existing dynamic rules on install to start fresh
+
+    // 清理历史版本的 dynamic referer 规则（referer 规则现已改为 session 规则，
+    // 浏览器关闭自动消失；旧 dynamic 规则会持久残留，需一次性清除）
     chrome.declarativeNetRequest.getDynamicRules((rules) => {
         const ruleIds = rules.map(r => r.id);
-        chrome.declarativeNetRequest.updateDynamicRules({
-            removeRuleIds: ruleIds
-        });
-        debug.log('Stale dynamic rules cleared on install');
+        if (ruleIds.length > 0) {
+            chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: ruleIds });
+            debug.log('Stale dynamic rules cleared on install');
+        }
     });
+    chrome.declarativeNetRequest.getSessionRules((rules) => {
+        const ruleIds = rules.map(r => r.id);
+        if (ruleIds.length > 0) {
+            chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: ruleIds });
+        }
+    });
+    chrome.storage.session.remove(REFERER_RULE_MAP_KEY).catch(() => {});
 });
 
 // Helper: check if a tab's URL is excluded and update badge accordingly
@@ -126,7 +131,7 @@ chrome.runtime.onStartup.addListener(() => {
         debug.log('Extension startup, badge state set for all tabs');
     });
 
-    // Clear session-specific dynamic rules on startup
+    // 清理旧版本遗留的 dynamic 规则；session 规则随浏览器关闭已自动消失
     chrome.declarativeNetRequest.getDynamicRules((rules) => {
         const ruleIds = rules.map(r => r.id);
         if (ruleIds.length > 0) {
@@ -197,9 +202,6 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     }
 });
 
-// Download ID → Tab ID 映射，用于下载完成后通知对应页面
-const downloadTabMap = new Map();
-
 // ===== 近期下载记录（popup「下载记录」tab 的数据源）=====
 // 记录生命周期：downloadImage/downloadCanvasImage 入口创建 pending 记录，
 // downloads.onChanged 的 complete/interrupted 或各失败分支将其终结为 success/failed。
@@ -225,7 +227,11 @@ async function recordDownloadStart(meta) {
         ts: Date.now(),
         downloadId: null,
         mode: meta.mode || 'normal',      // 下载模式，重试时恢复
-        pathIndex: meta.pathIndex ?? -1   // 保存路径索引，重试时恢复
+        pathIndex: meta.pathIndex ?? -1,  // 保存路径索引，重试时恢复
+        // 下载来源：hover(悬浮按钮/多路径工具栏) | context(右键菜单) | zip(批量打包)，
+        // 记录面板据此标注；老记录无此字段，渲染时按 hover 处理
+        source: meta.source || 'hover',
+        note: meta.note || null           // 批量下载的汇总信息（成功/跳过数）等
     };
     try {
         const data = await chrome.storage.local.get(DOWNLOAD_HISTORY_KEY);
@@ -323,6 +329,32 @@ function notifyDownloadFailed(tabId, filename, error) {
     }).catch(() => {});
 }
 
+// 下载完成/失败的 toast 发往用户当前所在的活动标签页：大图下载耗时较长，
+// 期间用户常已切走，发回发起页的 toast 用户看不到。活动页无 content script
+// （chrome:// 等受限页面）时 sendMessage 会失败，静默跳过即可。
+async function notifyActiveTabToast(payload) {
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        if (tab && tab.id != null) {
+            await chrome.tabs.sendMessage(tab.id, payload);
+        }
+    } catch (e) {
+        debug.log('活动页 toast 发送失败（可能为受限页面）:', e.message);
+    }
+}
+
+// 终态 toast 附带最终文件名：downloads.search 取浏览器落盘（含自动改名）的
+// 真实文件名，查不到时无文件名照样提示
+async function notifyDownloadResultToast(downloadId, payload) {
+    try {
+        const items = await chrome.downloads.search({ id: downloadId });
+        if (items && items[0] && items[0].filename) {
+            payload.filename = items[0].filename.split(/[\/]/).pop();
+        }
+    } catch (e) { /* 忽略 */ }
+    notifyActiveTabToast(payload);
+}
+
 // ===== pending 记录心跳校正 =====
 // MV3 的 SW 在无活动 30 秒后被终止；downloads.download 返回后大 dataUrl 的
 // 写盘由浏览器进程完成（可能持续几十秒~分钟），期间 SW 已休眠，
@@ -411,12 +443,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender.tab?.id;
 
     if (message.type === 'download_image') {
-        downloadImage(message.url, message.filename, message.downloadMode, message.pathIndex, tabId);
+        downloadImage(message.url, message.filename, message.downloadMode, message.pathIndex, tabId, message.source || 'hover');
     } else if (message.type === 'download_canvas_image') {
-        downloadCanvasImage(message.dataUrl, message.filename, message.pathIndex, tabId);
-    } else if (message.type === 'extract_canvas_image') {
-        // For canvas extraction, we'll need to send a message back to content script
-        sendResponse({ success: true });
+        downloadCanvasImage(message.dataUrl, message.filename, message.pathIndex, tabId, null, message.source || 'hover');
     } else if (message.type === 'check_webp_animated') {
         // Check if WebP is animated (runs in background to bypass CORS)
         checkWebPAnimated(message.url).then(result => {
@@ -442,9 +471,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             .then(rec => patchDownloadRecord(rec.id, { status: 'failed', error: message.error || 'MESSAGE_SEND_FAILED' }))
             .catch(() => {});
     } else if (message.type === 'retry_download') {
-        // popup「下载记录」失败条目的重试：按原记录恢复 URL/文件名/模式/路径。
+        // popup「下载记录」失败条目的重试：按原记录恢复 URL/文件名/模式/路径/来源。
         // 无 tabId（发起页面可能已关闭），结果由下载记录/心跳校正呈现。
-        downloadImage(message.url, message.filename, message.mode || 'normal', message.pathIndex ?? -1, null);
+        if (message.mode === 'direct') {
+            // 视频/链接右键直下模式：不走 fetch→dataUrl 管线（大文件 base64 会撑爆 SW）
+            downloadDirectWithRecord(message.url, message.filename || 'media', message.source || 'context', 'direct');
+        } else {
+            downloadImage(message.url, message.filename, message.mode || 'normal', message.pathIndex ?? -1, null, message.source || 'hover');
+        }
+    } else if (message.type === 'record_batch_result') {
+        // popup 批量 ZIP 的结果入记录：ZIP 由 popup 侧落盘，此处补建记录并绑定
+        // downloadId，终态由 onChanged 驱动；若 onChanged 先于绑定到达（ZIP 落盘
+        // 极快），由 30s 心跳校正兜底为最终一致。
+        recordDownloadStart({
+            filename: message.filename || 'images.zip',
+            url: message.url || '',
+            source: 'zip',
+            mode: 'normal',
+            pathIndex: -1,
+            note: message.note || null
+        }).then(rec => {
+            if (message.downloadId != null) {
+                return bindDownloadRecord(rec.id, message.downloadId);
+            }
+            if (message.status === 'failed') {
+                return patchDownloadRecord(rec.id, { status: 'failed', error: message.error || 'DOWNLOAD_FAILED' });
+            }
+        }).catch(() => {});
     } else if (message.type === 'ih:domain_status_changed') {
         // Only handle from top-level frame
         if (sender.frameId !== undefined && sender.frameId !== 0) {
@@ -458,13 +511,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
+// Referer 规则的 host→ruleId 映射持久化在 storage.session（浏览器生命周期内
+// 有效），SW 重启后仍能防止同 host 重复注册；规则本身也用 session 规则，
+// 浏览器关闭自动消失，无需启动清理。
+const REFERER_RULE_MAP_KEY = 'ih_referer_rule_map';
+
 // Dynamic rule management for referer spoofing
 async function addRefererRule(mediaHost, referer) {
     try {
-        if (hostnameToRuleId.has(mediaHost)) return;
+        const data = await chrome.storage.session.get(REFERER_RULE_MAP_KEY);
+        const map = data[REFERER_RULE_MAP_KEY] || {};
+        if (map[mediaHost] != null) return; // 已注册（含 SW 重启前的注册）
 
-        const id = dynamicRuleIdCount++;
-        hostnameToRuleId.set(mediaHost, id);
+        // 规则 id 需避开现存 session 规则，取当前最大 id + 1
+        const existing = await chrome.declarativeNetRequest.getSessionRules();
+        const id = existing.reduce((max, r) => Math.max(max, r.id), 1000) + 1;
 
         const rule = {
             id: id,
@@ -482,17 +543,19 @@ async function addRefererRule(mediaHost, referer) {
                 ]
             },
             condition: {
-                urlFilter: mediaHost,
+                // requestDomains 锚定域名（含子域），避免 urlFilter 子串误伤
+                // URL 中恰好包含该字符串的其它请求
+                requestDomains: [mediaHost],
                 resourceTypes: ['main_frame', 'sub_frame', 'xmlhttprequest', 'media', 'image', 'other']
             }
         };
 
-        await chrome.declarativeNetRequest.updateDynamicRules({
-            addRules: [rule]
-        });
-        debug.log(`Dynamic referer rule added for host: ${mediaHost} (ID: ${id}) with referer: ${referer}`);
+        await chrome.declarativeNetRequest.updateSessionRules({ addRules: [rule] });
+        map[mediaHost] = id;
+        await chrome.storage.session.set({ [REFERER_RULE_MAP_KEY]: map });
+        debug.log(`Session referer rule added for host: ${mediaHost} (ID: ${id}) with referer: ${referer}`);
     } catch (e) {
-        debug.error(`Error adding dynamic referer rule for ${mediaHost}:`, e);
+        debug.error(`Error adding referer rule for ${mediaHost}:`, e);
     }
 }
 
@@ -527,10 +590,10 @@ function blobToDataUrl(blob) {
 }
 
 // Download image function
-async function downloadImage(url, filename, downloadMode = 'normal', pathIndex = -1, tabId = null) {
+async function downloadImage(url, filename, downloadMode = 'normal', pathIndex = -1, tabId = null, source = 'hover') {
     // Clean filename - remove any potentially problematic characters
     const cleanFilename = filename.replace(/[<>:"/\\|?*]/g, '_');
-    const record = await recordDownloadStart({ filename: cleanFilename, url, mode: downloadMode || 'normal', pathIndex: pathIndex ?? -1 });
+    const record = await recordDownloadStart({ filename: cleanFilename, url, mode: downloadMode || 'normal', pathIndex: pathIndex ?? -1, source });
 
     try {
         // 优先通过 background 的 fetch 下载（DNR 规则生效且无 CORS 限制）
@@ -564,7 +627,6 @@ async function downloadImage(url, filename, downloadMode = 'normal', pathIndex =
             saveAs: false
         });
 
-        if (tabId) downloadTabMap.set(downloadId, tabId);
         await bindDownloadRecord(record.id, downloadId, { filename: cleanFilename });
 
         debug.log(`Image download started: ${cleanFilename} (ID: ${downloadId}) - Mode: ${downloadMode} - PathIndex: ${pathIndex}`);
@@ -577,7 +639,6 @@ async function downloadImage(url, filename, downloadMode = 'normal', pathIndex =
                 url: url,
                 saveAs: false
             });
-            if (tabId) downloadTabMap.set(fallbackId, tabId);
             await bindDownloadRecord(record.id, fallbackId);
         } catch (fallbackError) {
             debug.error('Fallback download also failed:', fallbackError);
@@ -591,10 +652,10 @@ async function downloadImage(url, filename, downloadMode = 'normal', pathIndex =
 // Download canvas-extracted image (or fast-path blob) from data URL
 // record: 复用调用方已创建的下载记录（downloadImage fetch 成功路径），
 //         不传则自建（content 的 canvas/WebP 转换 blob 直接调用）。
-async function downloadCanvasImage(dataUrl, filename, pathIndex = -1, tabId = null, record = null) {
+async function downloadCanvasImage(dataUrl, filename, pathIndex = -1, tabId = null, record = null, source = 'hover') {
     let rec = record;
     if (!rec) {
-        rec = await recordDownloadStart({ filename, url: dataUrl, mode: 'converted', pathIndex: pathIndex ?? -1 });
+        rec = await recordDownloadStart({ filename, url: dataUrl, mode: 'converted', pathIndex: pathIndex ?? -1, source });
     }
 
     try {
@@ -609,7 +670,6 @@ async function downloadCanvasImage(dataUrl, filename, pathIndex = -1, tabId = nu
             saveAs: false // Save to default downloads folder without dialog
         });
 
-        if (tabId) downloadTabMap.set(downloadId, tabId);
         await bindDownloadRecord(rec.id, downloadId, { filename: cleanFilename });
 
         debug.log(`Canvas/Fast-path image download started: ${cleanFilename} (ID: ${downloadId})`);
@@ -622,81 +682,64 @@ async function downloadCanvasImage(dataUrl, filename, pathIndex = -1, tabId = nu
     }
 }
 
+// ====== 浏览器原生图片下载入记录（source='browser'）======
+// Chrome 原生「图片另存为」、网页 <a> 链接点下的图片等不经过扩展，靠
+// downloads.onCreated 全局监听补录。判据：DownloadItem.byExtensionId ——
+// 扩展（本扩展有各自记录管线，其他扩展不相关）发起的下载会带该字段，
+// 原生下载不会，据此精确去重。
+function isImageFilename(name) {
+    return /\.(jpe?g|png|gif|webp|svg|bmp|tiff?|ico|avif|apng|heic)$/i.test(name || '');
+}
+
+chrome.downloads.onCreated.addListener((item) => {
+    try {
+        if (item.byExtensionId) return;
+
+        // 创建时 filename/mime 可能尚未确定，任一信号命中图片即记录
+        const mimeOk = !!(item.mime && item.mime.toLowerCase().startsWith('image/'));
+        const filename = (item.filename || '').split(/[\\/]/).pop();
+        let urlOk = false;
+        const rawUrl = item.finalUrl || item.url || '';
+        try { urlOk = isImageFilename(new URL(rawUrl).pathname); } catch { /* 非法 URL 忽略 */ }
+        if (!mimeOk && !isImageFilename(filename) && !urlOk) return;
+
+        let urlBasename = 'image';
+        try { urlBasename = decodeURIComponent(new URL(rawUrl).pathname.split('/').pop()) || 'image'; } catch { /* 保底 */ }
+
+        recordDownloadStart({
+            filename: filename || urlBasename,
+            url: rawUrl,
+            source: 'browser',
+            mode: 'normal',
+            pathIndex: -1
+        }).then(rec => bindDownloadRecord(rec.id, item.id)).catch(() => {});
+    } catch (e) {
+        debug.warn('记录浏览器原生图片下载失败:', e);
+    }
+});
+
 // 监听下载状态变化：complete → 通知页面 + 记录置成功；
 // interrupted（网络错误/被取消/被安全软件拦截等）→ 通知页面失败 + 记录置失败。
 chrome.downloads.onChanged.addListener((delta) => {
+    // 原生下载创建时 filename 可能为空（另存为对话框/重定向后才确定），
+    // 文件名 delta 到达时补写记录（取 basename，扩展自身记录同样受益于最终名）
+    if (delta.filename && delta.filename.current) {
+        const finalName = delta.filename.current.split(/[\\/]/).pop();
+        if (finalName) patchDownloadRecordByDownloadId(delta.id, { filename: finalName });
+    }
+
     if (!delta.state) return;
 
     if (delta.state.current === 'complete') {
-        const tabId = downloadTabMap.get(delta.id);
-        if (tabId) {
-            chrome.tabs.sendMessage(tabId, { type: 'download_complete' }).catch(() => {
-                debug.log('下载完成通知发送失败，标签页可能已关闭', tabId);
-            });
-            downloadTabMap.delete(delta.id);
-        }
+        notifyDownloadResultToast(delta.id, { type: 'download_complete' });
         patchDownloadRecordByDownloadId(delta.id, { status: 'success' });
     } else if (delta.state.current === 'interrupted') {
         const errCode = (delta.error && delta.error.current) || 'INTERRUPTED';
-        const tabId = downloadTabMap.get(delta.id);
-        if (tabId) {
-            chrome.tabs.sendMessage(tabId, { type: 'download_failed', error: errCode }).catch(() => {});
-            downloadTabMap.delete(delta.id);
-        }
+        notifyDownloadResultToast(delta.id, { type: 'download_failed', error: errCode });
         patchDownloadRecordByDownloadId(delta.id, { status: 'failed', error: errCode });
         debug.log('Download interrupted:', delta.id, errCode);
     }
 });
-
-// Experimental function to get image from browser cache
-async function getImageFromCache(url) {
-    try {
-        // Use fetch with cache-only mode to get from cache
-        const response = await fetch(url, {
-            cache: 'only-if-cached',
-            mode: 'same-origin'
-        });
-        
-        if (response.ok) {
-            return await response.blob();
-        }
-    } catch (error) {
-        debug.log('Cache-only fetch failed, trying force-cache:', error);
-        
-        // Fallback: try force-cache mode
-        try {
-            const response = await fetch(url, {
-                cache: 'force-cache'
-            });
-            
-            if (response.ok) {
-                return await response.blob();
-            }
-        } catch (forceCacheError) {
-            debug.log('Force-cache fetch also failed:', forceCacheError);
-        }
-    }
-    
-    return null;
-}
-
-// Get configured download subfolder from storage
-async function getDownloadSubfolder() {
-    try {
-        const data = await chrome.storage.sync.get('ih_download_subfolder');
-        let subfolder = data.ih_download_subfolder;
-        if (subfolder && typeof subfolder === 'string') {
-            // Sanitize: strip illegal characters, leading/trailing slashes
-            subfolder = subfolder.replace(/[<>:"\\|?*]/g, '').replace(/^[/\\]+|[/\\]+$/g, '');
-            if (subfolder.length > 0 && subfolder.length <= 200) {
-                return subfolder;
-            }
-        }
-    } catch (error) {
-        debug.error('Error getting download subfolder:', error);
-    }
-    return '';
-}
 
 // Build full download path by prepending base subfolder + configured subfolder or multi-path subfolder
 async function getBaseSubfolder() {
@@ -732,16 +775,10 @@ async function buildDownloadPath(filename, pathIndex = -1) {
                 return fullPath;
             }
         }
-        // If pathIndex is out of range or invalid, fall through to single-subfolder logic
-        debug.log(`Multi-path index ${pathIndex} not found, falling back to single subfolder`);
+        // If pathIndex is out of range or invalid, fall through to base dir
+        debug.log(`Multi-path index ${pathIndex} not found, falling back to base dir`);
     }
-    
-    // Fallback: original single subfolder (for ZIP downloads / right-click menu)
-    const subfolder = await getDownloadSubfolder();
-    if (subfolder) {
-        const fullPath = baseDir ? `${baseDir}/${subfolder}/${filename}` : `${subfolder}/${filename}`;
-        return fullPath;
-    }
+
     if (baseDir) {
         return `${baseDir}/${filename}`;
     }
@@ -944,126 +981,99 @@ async function fetchImageAsDataUrl(url) {
     }
 }
 
-// Download link directly to default directory
-async function downloadLinkDirectly(url) {
+// 右键菜单等直链场景的统一落盘口：chrome.downloads.download 直下（不经
+// fetch→dataUrl 管线，适合视频/大文件），创建下载记录并绑定 downloadId，
+// 终态由 downloads.onChanged 驱动。失败时兜底为不带文件名的直下。
+async function downloadDirectWithRecord(url, filename, source = 'context', mode = 'direct') {
+    const record = await recordDownloadStart({ filename, url, source, mode, pathIndex: -1 });
     try {
-        debug.log('Downloading link directly:', url);
-        
-        // Generate clean filename using shared function
-        const cleanFilename = generateCleanFilename(url, 'download', '-file');
-        
-        // Download using Chrome downloads API
         const downloadId = await chrome.downloads.download({
             url: url,
-            filename: await buildDownloadPath(cleanFilename),
-            saveAs: false // Don't prompt for save location, use default directory
+            filename: await buildDownloadPath(filename),
+            saveAs: false
         });
-        
-        debug.log('Link download started with ID:', downloadId);
-        
+        await bindDownloadRecord(record.id, downloadId, { filename });
+        debug.log(`Direct download started: ${filename} (ID: ${downloadId})`);
+        return true;
     } catch (error) {
-        debug.error('Error downloading link:', error);
+        debug.error('Error downloading directly:', error);
+        // Fallback: try to download without custom filename
+        try {
+            const fallbackId = await chrome.downloads.download({
+                url: url,
+                saveAs: false
+            });
+            await bindDownloadRecord(record.id, fallbackId, { filename });
+            return true;
+        } catch (fallbackError) {
+            debug.error('Fallback direct download also failed:', fallbackError);
+            await patchDownloadRecord(record.id, { status: 'failed', error: String(fallbackError?.message || error) });
+            return false;
+        }
     }
+}
+
+// Download link directly to default directory
+async function downloadLinkDirectly(url) {
+    debug.log('Downloading link directly:', url);
+    const cleanFilename = generateCleanFilename(url, 'download', '-file');
+    await downloadDirectWithRecord(url, cleanFilename, 'context', 'direct');
 }
 
 // Download video directly to default directory
 async function downloadVideoDirectly(videoUrl, tab) {
-    try {
-        debug.log('Downloading video directly:', videoUrl);
-        
-        // Generate clean filename using shared function
-        let cleanFilename = generateCleanFilename(videoUrl, 'video', '.mp4');
-        
-        // Ensure it has a video extension if none present
-        const videoExtensions = ['.mp4', '.webm', '.ogg', '.avi', '.mov', '.wmv', '.flv', '.mkv'];
-        const hasVideoExtension = videoExtensions.some(ext => 
-            cleanFilename.toLowerCase().endsWith(ext.toLowerCase())
-        );
-        
-        if (!hasVideoExtension) {
-            // Try to detect extension from URL or default to .mp4
-            const urlLower = videoUrl.toLowerCase();
-            const detectedExt = videoExtensions.find(ext => urlLower.includes(ext.toLowerCase()));
-            cleanFilename += detectedExt || '.maybe.mp4';
-        }
-        
-        // Clean up URL - remove fragment identifiers like #t=0.01
-        let cleanUrl = videoUrl;
-        if (cleanUrl.includes('#')) {
-            cleanUrl = cleanUrl.split('#')[0];
-        }
-        
-        // Download using Chrome downloads API
-        const downloadId = await chrome.downloads.download({
-            url: cleanUrl,
-            filename: await buildDownloadPath(cleanFilename),
-            saveAs: false // Don't prompt for save location, use default directory
-        });
-        
-        debug.log('Video download started with ID:', downloadId, 'Filename:', cleanFilename);
-        
-    } catch (error) {
-        debug.error('Error downloading video:', error);
-        
-        // Fallback: try to download without custom filename
-        try {
-            await chrome.downloads.download({
-                url: videoUrl,
-                saveAs: false
-            });
-        } catch (fallbackError) {
-            debug.error('Fallback video download also failed:', fallbackError);
-        }
+    debug.log('Downloading video directly:', videoUrl);
+
+    let cleanFilename = generateCleanFilename(videoUrl, 'video', '.mp4');
+
+    // Ensure it has a video extension if none present
+    const videoExtensions = ['.mp4', '.webm', '.ogg', '.avi', '.mov', '.wmv', '.flv', '.mkv'];
+    const hasVideoExtension = videoExtensions.some(ext =>
+        cleanFilename.toLowerCase().endsWith(ext.toLowerCase())
+    );
+
+    if (!hasVideoExtension) {
+        // Try to detect extension from URL or default to .mp4
+        const urlLower = videoUrl.toLowerCase();
+        const detectedExt = videoExtensions.find(ext => urlLower.includes(ext.toLowerCase()));
+        cleanFilename += detectedExt || '.maybe.mp4';
     }
+
+    // Clean up URL - remove fragment identifiers like #t=0.01
+    let cleanUrl = videoUrl;
+    if (cleanUrl.includes('#')) {
+        cleanUrl = cleanUrl.split('#')[0];
+    }
+
+    await downloadDirectWithRecord(cleanUrl, cleanFilename, 'context', 'direct');
 }
 
 // Download image directly to default directory
 async function downloadImageDirectly(imageUrl, tab) {
-    try {
-        debug.log('Downloading image directly:', imageUrl);
-        
-        // Generate clean filename using shared function
-        let cleanFilename = generateCleanFilename(imageUrl, 'image', '.jpg');
-        
-        // Ensure it has an image extension if none present
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.tiff', '.ico'];
-        const hasImageExtension = imageExtensions.some(ext => 
-            cleanFilename.toLowerCase().endsWith(ext.toLowerCase())
-        );
-        
-        if (!hasImageExtension) {
-            // Try to detect extension from URL or default to .jpg
-            const urlLower = imageUrl.toLowerCase();
-            const detectedExt = imageExtensions.find(ext => urlLower.includes(ext.toLowerCase()));
-            cleanFilename += detectedExt || '.maybe.jpg';
-        }
-        
-        // Clean up URL - remove fragment identifiers
-        let cleanUrl = imageUrl;
-        if (cleanUrl.includes('#')) {
-            cleanUrl = cleanUrl.split('#')[0];
-        }
-        
-        // Download using Chrome downloads API
-        const downloadId = await chrome.downloads.download({
-            url: cleanUrl,
-            filename: await buildDownloadPath(cleanFilename),
-            saveAs: false // Don't prompt for save location, use default directory
-        });
-        
-        debug.log('Image download started with ID:', downloadId, 'Filename:', cleanFilename);
-        
-    } catch (error) {
-        debug.error('Error downloading image:', error);
-        
-        // Fallback: try to download without custom filename
-        try {
-            await chrome.downloads.download({
-                url: imageUrl,
-                saveAs: false
-            });
-        } catch (fallbackError) {
-            debug.error('Fallback image download also failed:', fallbackError);
-        }
+    debug.log('Downloading image directly:', imageUrl);
+
+    let cleanFilename = generateCleanFilename(imageUrl, 'image', '.jpg');
+
+    // Ensure it has an image extension if none present
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.tiff', '.ico'];
+    const hasImageExtension = imageExtensions.some(ext =>
+        cleanFilename.toLowerCase().endsWith(ext.toLowerCase())
+    );
+
+    if (!hasImageExtension) {
+        // Try to detect extension from URL or default to .jpg
+        const urlLower = imageUrl.toLowerCase();
+        const detectedExt = imageExtensions.find(ext => urlLower.includes(ext.toLowerCase()));
+        cleanFilename += detectedExt || '.maybe.jpg';
     }
+
+    // Clean up URL - remove fragment identifiers
+    let cleanUrl = imageUrl;
+    if (cleanUrl.includes('#')) {
+        cleanUrl = cleanUrl.split('#')[0];
+    }
+
+    // 图片走统一下载管线：fetch 下载可按 Content-Type 修正扩展名，
+    // 失败有完整回退链，并与其他来源共用下载记录/路径/通知逻辑
+    await downloadImage(cleanUrl, cleanFilename, 'normal', -1, tab?.id ?? null, 'context');
 }

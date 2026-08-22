@@ -35,7 +35,6 @@ async function initializePopup() {
         const convertWebpToPng = await storage.get('ih_convert_webp_to_png');
         const borderHighlightMode = await storage.get('ih_border_highlight_mode');
         const longHideDelaySetting = await storage.get('ih_long_hide_delay');
-        const downloadSubfolder = await storage.get('ih_download_subfolder');
         const baseSubfolder = await storage.get('ih_base_subfolder');
         
         // Multi-path settings
@@ -126,12 +125,6 @@ async function initializePopup() {
         
         // Set long hide delay option
         document.getElementById('longHideDelay').checked = longHideDelaySetting === true;
-        
-        // Set download subfolder (kept for ZIP / non-multi-path usage)
-        const subfolderInput = document.getElementById('downloadSubfolder');
-        if (subfolderInput) {
-            subfolderInput.value = downloadSubfolder || '';
-        }
 
         // Set base subfolder (parent for all download paths)
         const baseSubfolderInput = document.getElementById('baseSubfolder');
@@ -160,6 +153,7 @@ async function initializePopup() {
         if (tplInput) {
             tplInput.value = filenameTemplate || '';
             diag.log('[IH Popup] set #filenameTemplate.value =', JSON.stringify(tplInput.value));
+            updateTemplatePreview(tplInput.value);
         }
 
         // Set up multi-path UI
@@ -178,6 +172,9 @@ async function initializePopup() {
 
         // Set up language selector listener
         setupLanguageSelectorListener();
+
+        // Set up theme switcher (Appearance section in Advanced tab)
+        setupThemeUI();
 
         // Set up current site domain display
         setupCurrentSite();
@@ -309,10 +306,20 @@ async function renderDownloadHistory() {
 
         const item = document.createElement('div');
         item.className = 'dl-item dl-' + (rec.status || 'pending');
+        if (rec.downloadId != null) item.dataset.downloadId = rec.downloadId;
+        item.dataset.status = rec.status || 'pending';
 
         const dot = document.createElement('span');
         dot.className = 'dl-dot';
         dot.title = i18n.t(statusKey);
+
+        // 来源徽章：区分悬浮按钮 / 右键菜单 / 批量 ZIP / 画廊 / 浏览器原生下载（老记录无字段按悬浮按钮）
+        const SOURCE_LABEL_KEYS = { hover: 'dlSourceHover', context: 'dlSourceContext', zip: 'dlSourceZip', gallery: 'dlSourceGallery', browser: 'dlSourceBrowser' };
+        const sourceKey = SOURCE_LABEL_KEYS[rec.source] || 'dlSourceOther';
+        const sourceLabel = i18n.t(sourceKey);
+        const badge = document.createElement('span');
+        badge.className = 'dl-source dl-source-' + (rec.source || 'hover');
+        badge.textContent = sourceLabel;
 
         const name = document.createElement('span');
         name.className = 'dl-name';
@@ -323,18 +330,43 @@ async function renderDownloadHistory() {
         time.textContent = formatRelativeTime(rec.ts || Date.now());
 
         item.appendChild(dot);
+        item.appendChild(badge);
         item.appendChild(name);
         item.appendChild(time);
 
-        // 悬停可见完整信息：来源 URL + 失败原因（含重试提示）
+        // 悬停可见完整信息：来源 URL + 失败原因（含重试提示）/ 打开目录提示
         const errLine = rec.status === 'failed'
             ? `\n${i18n.t('downloadStatusFailed')}: ${rec.error || 'unknown'}\n${i18n.t('retryHint')}`
             : '';
-        item.title = `${rec.filename || ''}\n${rec.url || ''}${errLine}`;
+        const openLine = rec.status === 'success'
+            ? `\n${i18n.t('openFolderHint')}`
+            : '';
+        const sourceLine = `\n${i18n.t('dlSourceTitle')}: ${sourceLabel}`;
+        const noteLine = rec.note ? `\n${rec.note}` : '';
+        item.title = `${rec.filename || ''}\n${rec.url || ''}${errLine}${openLine}${sourceLine}${noteLine}`;
 
-        // 点击重试：仅失败记录且 URL 为可再次下载的 http(s) 地址时可用
-        // （data:/blob: 是页面内转换产物，脱离页面上下文无法重建）
+        // 点击成功记录：在系统文件管理器中打开所在目录并高亮文件。
+        // 记录自「大图下载收口 background」起均绑定 downloadId；
+        // 文件可能已被用户移动/删除，先经 search 确认存在再调 show。
         item.addEventListener('click', async () => {
+            if (rec.status === 'success') {
+                try {
+                    if (rec.downloadId == null) {
+                        showStatus(i18n.t('openFolderMissing'), 'error');
+                        return;
+                    }
+                    const items = await chrome.downloads.search({ id: rec.downloadId });
+                    if (!items.length || !items[0].exists) {
+                        showStatus(i18n.t('openFolderMissing'), 'error');
+                        return;
+                    }
+                    await chrome.downloads.show(rec.downloadId);
+                } catch (e) {
+                    diag.error('打开所在目录失败:', e);
+                    showStatus(i18n.t('openFolderMissing'), 'error');
+                }
+                return;
+            }
             if (rec.status !== 'failed') return;
             if (!rec.url || rec.url.startsWith('data:') || rec.url.startsWith('blob:')) {
                 showStatus(i18n.t('retryNotAvailable'), 'error');
@@ -346,7 +378,8 @@ async function renderDownloadHistory() {
                     url: rec.url,
                     filename: rec.filename || 'media',
                     mode: rec.mode || 'normal',
-                    pathIndex: (rec.pathIndex != null ? rec.pathIndex : -1)
+                    pathIndex: (rec.pathIndex != null ? rec.pathIndex : -1),
+                    source: rec.source || 'hover'
                 });
                 showStatus(i18n.tf('statusRetryQueued', { name: rec.filename || '' }), 'success');
             } catch (e) {
@@ -357,6 +390,54 @@ async function renderDownloadHistory() {
 
         listEl.appendChild(item);
     });
+
+    enrichDownloadRecords(list);
+    updateRetryAllVisibility(list);
+}
+
+// 为已渲染的记录补充实时信息：成功条目附文件大小、pending 条目显示进度百分比。
+// 一次 downloads.search 批量查询，避免逐条请求。
+let enrichTimer = null;
+function scheduleEnrich() {
+    if (enrichTimer) return;
+    enrichTimer = setTimeout(() => { enrichTimer = null; enrichDownloadRecords(); }, 400);
+}
+
+async function enrichDownloadRecords() {
+    try {
+        const items = await chrome.downloads.search({});
+        const byId = new Map(items.map(it => [it.id, it]));
+        document.querySelectorAll('.dl-item[data-download-id]').forEach(itemEl => {
+            const it = byId.get(parseInt(itemEl.dataset.downloadId, 10));
+            const timeEl = itemEl.querySelector('.dl-time');
+            if (!it || !timeEl) return;
+            if (itemEl.dataset.status === 'pending') {
+                const total = it.totalBytes > 0 ? it.totalBytes : 0;
+                if (total && it.bytesReceived >= 0) {
+                    timeEl.textContent = Math.min(100, Math.floor(it.bytesReceived / total * 100)) + '%';
+                }
+            } else if (itemEl.dataset.status === 'success' && it.fileSize > 0) {
+                timeEl.textContent = `${formatFileSize(it.fileSize)} · ${timeEl.textContent.split(' · ').pop()}`;
+            }
+        });
+    } catch (e) {
+        debug.warn('补充下载记录信息失败:', e);
+    }
+}
+
+function formatFileSize(bytes) {
+    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+    if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return bytes + ' B';
+}
+
+// 「重试全部失败」仅在存在可重试的失败记录时显示
+function updateRetryAllVisibility(list) {
+    const btn = document.getElementById('retryAllBtn');
+    if (!btn) return;
+    const retryable = (list || []).some(r => r.status === 'failed' && r.url &&
+        !r.url.startsWith('data:') && !r.url.startsWith('blob:'));
+    btn.hidden = !retryable;
 }
 
 function setupDownloadHistory() {
@@ -369,6 +450,9 @@ function setupDownloadHistory() {
         }
     });
 
+    // pending 条目的进度百分比不触发 storage 变化，轮询补充（仅 popup 打开期间）
+    window.setInterval(scheduleEnrich, 2000);
+
     const clearBtn = document.getElementById('clearHistoryBtn');
     if (clearBtn) {
         clearBtn.addEventListener('click', async () => {
@@ -379,36 +463,105 @@ function setupDownloadHistory() {
             }
         });
     }
+
+    const retryAllBtn = document.getElementById('retryAllBtn');
+    if (retryAllBtn) {
+        retryAllBtn.addEventListener('click', async () => {
+            try {
+                const data = await chrome.storage.local.get(DL_HISTORY_KEY);
+                const list = data[DL_HISTORY_KEY] || [];
+                let queued = 0;
+                for (const rec of list) {
+                    if (rec.status !== 'failed') continue;
+                    if (!rec.url || rec.url.startsWith('data:') || rec.url.startsWith('blob:')) continue;
+                    try {
+                        await chrome.runtime.sendMessage({
+                            type: 'retry_download',
+                            url: rec.url,
+                            filename: rec.filename || 'media',
+                            mode: rec.mode || 'normal',
+                            pathIndex: (rec.pathIndex != null ? rec.pathIndex : -1),
+                            source: rec.source || 'hover'
+                        });
+                        queued++;
+                    } catch (e) { /* 单条失败不中断 */ }
+                }
+                showStatus(i18n.tf('galleryQueued', { n: queued }), queued ? 'success' : 'error');
+            } catch (e) {
+                diag.error('重试全部失败:', e);
+            }
+        });
+    }
 }
 
 // Set up download mode UI
 function setupDownloadModeUI(currentMode) {
-    const downloadModeRadios = document.querySelectorAll('input[name="downloadMode"]');
-    downloadModeRadios.forEach(radio => {
-        radio.addEventListener('change', function() {
-            if (this.value !== 'normal') {
-                switchToTab('advanced');
-            }
-        });
-    });
-
+    // 打开 popup 时若处于实验模式，自动切到高级 tab 让用户看到当前模式选项
     if (currentMode !== 'normal') {
         switchToTab('advanced');
     }
 }
 
-// Set up language selector event listener
+// ====== 分段滑块（语言/主题共用的三段选择控件） ======
+// 初始定位不带动画（避免打开时滑块从首段滑走），切换时 0.25s 滑动
+function setupSegmentSlider(segmentEl, initialValue, onChange) {
+    if (!segmentEl) return;
+    const thumb = segmentEl.querySelector('.seg-slider-thumb');
+    const radios = [...segmentEl.querySelectorAll('input[type="radio"]')];
+
+    const moveThumb = (animate) => {
+        const checked = segmentEl.querySelector('input:checked');
+        if (!checked || !thumb) return;
+        const idx = radios.indexOf(checked);
+        if (idx < 0) return;
+        if (!animate) thumb.style.transition = 'none';
+        thumb.style.transform = `translateX(${idx * 100}%)`;
+        if (!animate) requestAnimationFrame(() => { thumb.style.transition = ''; });
+    };
+
+    if (initialValue != null) {
+        const r = radios.find(x => x.value === initialValue);
+        if (r) r.checked = true;
+    }
+    moveThumb(false);
+
+    radios.forEach(r => r.addEventListener('change', function () {
+        if (!this.checked) return;
+        moveThumb(true);
+        if (onChange) onChange(this.value);
+    }));
+}
+
+// Set up language segment slider
 function setupLanguageSelectorListener() {
-    const languageSelect = document.getElementById('languageSelect');
-    if (!languageSelect) {
-        diag.error('setupLanguageSelectorListener: #languageSelect NOT FOUND!');
+    const segment = document.getElementById('langSegment');
+    if (!segment) {
+        diag.error('setupLanguageSelectorListener: #langSegment NOT FOUND!');
         return;
     }
-    diag.log('setupLanguageSelectorListener: attached to #languageSelect');
+    setupSegmentSlider(segment, i18n.currentLocale || 'auto', async (value) => {
+        diag.log('language segment changed, new value:', value);
+        await i18n.setLocale(value);
+        // 语言切换后动态渲染的内容（下载记录/路径列表/模板预览）不会随 data-i18n
+        // 自动更新，需手动重渲染
+        renderDownloadHistory();
+        renderPathList(await storage.get('ih_multi_paths') || []);
+        updateTemplatePreview();
+    });
+}
 
-    languageSelect.addEventListener('change', async (e) => {
-        diag.log('languageSelect change event fired, new value:', e.target.value);
-        await i18n.setLocale(e.target.value);
+// ====== 主题切换（ih_theme: auto | light | dark） ======
+function applyTheme(theme) {
+    document.documentElement.dataset.theme = (theme === 'light' || theme === 'dark') ? theme : '';
+}
+
+async function setupThemeUI() {
+    const saved = await storage.get('ih_theme');
+    const theme = (saved === 'light' || saved === 'dark') ? saved : 'auto';
+    applyTheme(theme);
+    setupSegmentSlider(document.getElementById('themeSegment'), theme, async (value) => {
+        applyTheme(value);
+        await storage.set('ih_theme', value);
     });
 }
 
@@ -418,17 +571,36 @@ async function checkPageAndDisableBulkButtons() {
     const downloadZipBtn = document.getElementById('downloadZipBtn');
     if (!downloadAllBtn || !downloadZipBtn) return;
 
+    const disable = (tipKey) => {
+        const tip = i18n.t(tipKey);
+        downloadAllBtn.disabled = true;
+        downloadAllBtn.title = tip;
+        downloadZipBtn.disabled = true;
+        downloadZipBtn.title = tip;
+    };
+
     try {
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
         const url = activeTab?.url || '';
         const supported = url.startsWith('http://') || url.startsWith('https://');
 
         if (!supported) {
-            const tip = i18n.t('statusUnsupportedPage');
-            downloadAllBtn.disabled = true;
-            downloadAllBtn.title = tip;
-            downloadZipBtn.disabled = true;
-            downloadZipBtn.title = tip;
+            disable('statusUnsupportedPage');
+            return;
+        }
+
+        // 页面可通信但扩展被关闭/当前域名被排除时，批量操作同样不可用
+        const enabled = await storage.get('ih_enabled');
+        if (enabled === false) {
+            disable('statusDisabled');
+            return;
+        }
+        const exclusions = await storage.get('ih_domain_exclusions') || [];
+        if (Array.isArray(exclusions) && exclusions.length && url) {
+            let host = '';
+            try { host = new URL(url).hostname; } catch { /* ignore */ }
+            const excluded = exclusions.some(d => host === d || host.endsWith('.' + d));
+            if (excluded) disable('statusDomainExcluded');
         }
     } catch (e) {
         debug.warn('Failed to check page type for bulk buttons:', e.message);
@@ -737,27 +909,6 @@ function setupImageDetectionListeners() {
         }
     });
 
-    // Download subfolder input (kept for ZIP / non-multi-path usage)
-    const downloadSubfolderInputEl = document.getElementById('downloadSubfolder');
-    if (downloadSubfolderInputEl) {
-        downloadSubfolderInputEl.addEventListener('change', async (e) => {
-            let rawValue = e.target.value.trim();
-            let sanitized = rawValue.replace(/[<>:"\\|?*]/g, '').replace(/^[/\\]+|[/\\]+$/g, '');
-            e.target.value = sanitized;
-            const success = await storage.set('ih_download_subfolder', sanitized);
-            if (success) {
-                if (sanitized) {
-                    showStatus(i18n.tf('statusSubfolderSet', { value: sanitized }));
-                } else {
-                    showStatus(i18n.t('statusSubfolderDirect'));
-                }
-                await notifyContentScriptSettingsChanged();
-            } else {
-                showStatus(i18n.t('statusSubfolderFailed'), 'error');
-            }
-        });
-    }
-
     // Base subfolder input (parent directory for all download paths)
     const baseSubfolderInputEl = document.getElementById('baseSubfolder');
     if (baseSubfolderInputEl) {
@@ -785,6 +936,7 @@ function setupImageDetectionListeners() {
 
     // 增强的保存函数：双写 sync + local 保证可靠（sync 可能因未登录/配额静默丢失）
     const persistTemplate = async (value) => {
+        updateTemplatePreview(value); // 所有落库路径（chip/分隔符/blur）统一刷新预览
         const trimmed = (value || '').trim();
         diag.log('[IH Popup] persistTemplate:', JSON.stringify(trimmed));
         try {
@@ -912,6 +1064,7 @@ function setupImageDetectionListeners() {
     if (filenameTemplateInput) {
         filenameTemplateInput.addEventListener('input', (e) => {
             refreshChipStates(e.target.value);
+            updateTemplatePreview(e.target.value);
             scheduleTemplateSave(e.target.value);
         });
         filenameTemplateInput.addEventListener('blur', (e) => {
@@ -1137,7 +1290,8 @@ function updatePath(index) {
         const newFolder = (folderInput ? folderInput.value.trim() : '');
         
         // Validate: both fields required
-        if (!newName && !newFolder) {
+        if (!newName || !newFolder) {
+            // 任一项为空都视为无效：半填的路径在页面上会渲染出无名/无目录的按钮
             showStatus(i18n.t('statusPathEmpty'), 'error');
             // Restore original values
             if (nameInput) nameInput.value = paths[index].name || '';
@@ -1280,6 +1434,28 @@ async function getCurrentSettings() {
     }
 }
 
+// 命名模板实时预览：用固定示例上下文渲染当前输入，让用户看到将产出的文件名
+function updateTemplatePreview(templateValue) {
+    const el = document.getElementById('templatePreview');
+    if (!el || !window.IHNaming) return;
+    const tpl = String(templateValue != null ? templateValue
+        : (document.getElementById('filenameTemplate')?.value || '')).trim();
+    if (!tpl) {
+        el.textContent = i18n.t('templatePreviewEmpty');
+        el.classList.add('empty');
+        return;
+    }
+    el.classList.remove('empty');
+    const ctx = window.IHNaming.buildContext({
+        pageUrl: 'https://www.example.com/gallery/night-city',
+        pageTitle: 'Night City Gallery',
+        mediaUrl: 'https://cdn.example.com/img/2026/sunset.jpg',
+        defaultExtension: 'jpg',
+        strategy: 'demo'
+    });
+    el.textContent = window.IHNaming.renderTemplate(tpl, ctx) || i18n.t('templatePreviewEmpty');
+}
+
 // Handle gallery view
 async function handleGalleryView() {
     try {
@@ -1329,17 +1505,28 @@ async function handleGalleryView() {
             return;
         }
         
-        // Create gallery HTML
-        debug.log('Creating gallery HTML...');
-        const galleryHtml = await createGalleryHtml(images, activeTab.title);
-        debug.log('Gallery HTML length:', galleryHtml.length);
-        
-        // Open gallery in new tab
-        debug.log('Opening gallery in new tab...');
+        // 扫描结果经 storage.session 交给扩展画廊页 gallery.html。
+        // 旧方案用 data: URL 内联整页：受 Chrome 顶层 data: 导航限制、页面
+        // 关闭即丢、且无法使用扩展 API（下载入记录等）。画廊页读后即删数据。
+        try {
+            await chrome.storage.session.set({
+                ih_gallery_data: {
+                    images: images,
+                    pageTitle: activeTab.title || '',
+                    pageUrl: activeTab.url || '',
+                    ts: Date.now()
+                }
+            });
+        } catch (e) {
+            debug.error('写入画廊扫描数据失败:', e);
+            showStatus(i18n.t('statusGalleryFailed'), 'error');
+            return;
+        }
+
         chrome.tabs.create({
-            url: 'data:text/html;charset=utf-8,' + encodeURIComponent(galleryHtml)
+            url: chrome.runtime.getURL('gallery.html')
         });
-        
+
         showStatus(i18n.tf('statusGalleryOpened', { count: images.length }));
         debug.log('Gallery view completed successfully');
         
@@ -1350,9 +1537,20 @@ async function handleGalleryView() {
 }
 
 // Handle ZIP download
+// ZIP 批量下载的进行中/取消状态：批量期间 🗜️ 按钮复用为「取消」开关
+let zipInProgress = false;
+let zipCancelRequested = false;
+
 async function handleDownloadZip() {
+    // 进行中再次点击 = 请求取消后续拉取
+    if (zipInProgress) {
+        zipCancelRequested = true;
+        showStatus(i18n.t('zipCancelling'), 'info');
+        return;
+    }
+
     debug.log('[IH Popup] ZIP download started');
-    
+
     // First check if JSZip is available
     if (typeof JSZip === 'undefined') {
         debug.error('[IH Popup] JSZip not available during download');
@@ -1411,96 +1609,161 @@ async function handleDownloadZip() {
             showStatus(i18n.t('statusNoImages'), 'info');
             return;
         }
-        
-        showStatus(i18n.tf('statusDownloading', { count: images.length }), 'info');
-        
-        // Create ZIP file
-        debug.log('Creating ZIP file with JSZip...');
-        const zip = new JSZip();
-        const imageFolder = zip.folder('images');
-        
-        let downloadedCount = 0;
-        const totalCount = images.length;
-        
-        // Download each image and add to ZIP
-        let skippedCount = 0;
-        for (let i = 0; i < images.length; i++) {
-            const image = images[i];
-            debug.log(`Processing image ${i + 1}/${totalCount}:`, image.url);
-            
-            try {
-                debug.log('Fetching image data...');
-                const imageData = await fetchImageAsBlob(image.url);
-                debug.log('Image data received, size:', imageData.size);
-                
-                const filename = generateImageFilename(image, i);
-                debug.log('Generated filename:', filename);
-                
-                imageFolder.file(filename, imageData);
-                downloadedCount++;
-                
-                // Update progress
-                showStatus(i18n.tf('statusDownloadProgress', { current: downloadedCount, total: totalCount }), 'info');
-                debug.log(`Successfully added image ${downloadedCount}/${totalCount} to ZIP`);
-                
-            } catch (error) {
-                skippedCount++;
-                debug.warn(`Failed to download image ${i + 1}/${totalCount} (${image.url}):`, error.message);
-                // Continue with other images - this handles CORS and other fetch errors gracefully
-            }
-        }
-        
-        debug.log(`ZIP creation completed. Downloaded: ${downloadedCount}/${totalCount}`);
-        
-        if (downloadedCount === 0) {
-            showStatus(i18n.t('statusNoDownloads'), 'error');
+
+        // 数量确认：批量拉取耗时且占带宽，先让用户知道规模再开始
+        if (!window.confirm(i18n.tf('zipConfirm', { count: images.length }))) {
             return;
         }
-        
-        // Generate ZIP file
-        debug.log('Generating ZIP blob...');
-        showStatus(i18n.t('statusCreatingZip'), 'info');
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        debug.log('ZIP blob created, size:', zipBlob.size);
-        
-        // Create download link
-        const url = URL.createObjectURL(zipBlob);
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const pageTitle = activeTab.title ? sanitizeFilename(activeTab.title).substring(0, 30) : 'page';
-        const zipFilename = `ih_images_${pageTitle}_${timestamp}.zip`;
-        
-        // Prepend subfolder if configured
-        const subfolder = await storage.get('ih_download_subfolder');
-        const filename = (subfolder && subfolder.trim())
-            ? `${subfolder.trim()}/${zipFilename}`
-            : zipFilename;
-        
-        debug.log('Starting download with filename:', filename);
-        
-        // Use Chrome downloads API
-        chrome.downloads.download({
-            url: url,
-            filename: filename,
-            saveAs: false  // Download directly without prompting
-        }, (downloadId) => {
-            if (chrome.runtime.lastError) {
-                debug.error('Download failed:', chrome.runtime.lastError.message);
-                showStatus(i18n.tf('statusDownloadFailed', { error: chrome.runtime.lastError.message }), 'error');
-            } else {
-                debug.log('Download started with ID:', downloadId);
-                showStatus(i18n.tf('statusZipCreated', { count: downloadedCount }));
-            }
-            
-            // Clean up object URL
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-        });
-        
-        debug.log('ZIP download completed successfully');
-        
+
+        // 批量期间按钮转为「取消」模式，结束后恢复
+        const zipBtn = document.getElementById('downloadZipBtn');
+        const zipBtnOriginalHtml = zipBtn ? zipBtn.innerHTML : '';
+        const setZipCancelMode = (on) => {
+            if (!zipBtn) return;
+            zipBtn.innerHTML = on ? `🛑 ${i18n.t('zipCancel')}` : zipBtnOriginalHtml;
+            zipBtn.classList.toggle('cancel-mode', on);
+        };
+
+        zipInProgress = true;
+        zipCancelRequested = false;
+        setZipCancelMode(true);
+        try {
+            await collectAndZipImages(images, activeTab);
+        } finally {
+            zipInProgress = false;
+            zipCancelRequested = false;
+            setZipCancelMode(false);
+        }
+
     } catch (error) {
         debug.error('ZIP download error:', error);
         showStatus(i18n.t('statusZipCreateFailed'), 'error');
     }
+}
+
+// 拉取已扫描图片并打包落盘（由 handleDownloadZip 调用，期间 zipCancelRequested 生效）
+async function collectAndZipImages(images, activeTab) {
+    showStatus(i18n.tf('statusDownloading', { count: images.length }), 'info');
+
+    // Create ZIP file
+    debug.log('Creating ZIP file with JSZip...');
+    const zip = new JSZip();
+    const imageFolder = zip.folder('images');
+
+    let downloadedCount = 0;
+    const totalCount = images.length;
+
+    // Download each image and add to ZIP
+    let skippedCount = 0;
+    for (let i = 0; i < images.length; i++) {
+        if (zipCancelRequested) break;
+        const image = images[i];
+        debug.log(`Processing image ${i + 1}/${totalCount}:`, image.url);
+
+        try {
+            debug.log('Fetching image data...');
+            const imageData = await fetchImageAsBlob(image.url);
+            debug.log('Image data received, size:', imageData.size);
+
+            const filename = generateImageFilename(image, i);
+            debug.log('Generated filename:', filename);
+
+            imageFolder.file(filename, imageData);
+            downloadedCount++;
+
+            // Update progress
+            showStatus(i18n.tf('statusDownloadProgress', { current: downloadedCount, total: totalCount }), 'info');
+            debug.log(`Successfully added image ${downloadedCount}/${totalCount} to ZIP`);
+
+        } catch (error) {
+            skippedCount++;
+            debug.warn(`Failed to download image ${i + 1}/${totalCount} (${image.url}):`, error.message);
+            // Continue with other images - this handles CORS and other fetch errors gracefully
+        }
+    }
+
+    debug.log(`ZIP creation completed. Downloaded: ${downloadedCount}/${totalCount}`);
+
+    // 用户取消：无已获取内容则直接放弃；有则询问是否打包已获取部分
+    if (zipCancelRequested) {
+        if (downloadedCount === 0) {
+            showStatus(i18n.t('zipAborted'), 'info');
+            return;
+        }
+        if (!window.confirm(i18n.tf('zipPartialConfirm', { count: downloadedCount }))) {
+            showStatus(i18n.t('zipAborted'), 'info');
+            return;
+        }
+    }
+
+    if (downloadedCount === 0) {
+        showStatus(i18n.t('statusNoDownloads'), 'error');
+        return;
+    }
+
+    // Generate ZIP file
+    debug.log('Generating ZIP blob...');
+    showStatus(i18n.t('statusCreatingZip'), 'info');
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    debug.log('ZIP blob created, size:', zipBlob.size);
+
+    // Create download link
+    const url = URL.createObjectURL(zipBlob);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const pageTitle = activeTab.title ? sanitizeFilename(activeTab.title).substring(0, 30) : 'page';
+    const zipFilename = `ih_images_${pageTitle}_${timestamp}.zip`;
+
+    // ZIP 与单图下载同规则：落入基础保存目录（如有配置）
+    const subfolder = await storage.get('ih_base_subfolder');
+    const filename = (subfolder && subfolder.trim())
+        ? `${subfolder.trim().replace(/[<>:"\\|?*]/g, '').replace(/^[/\\]+|[/\\]+$/g, '')}/${zipFilename}`
+        : zipFilename;
+
+    debug.log('Starting download with filename:', filename);
+
+    // 批量结果写入下载记录（source='zip'），note 携带成功/跳过汇总
+    const skippedTotal = totalCount - downloadedCount;
+    const recordNote = (skippedTotal > 0)
+        ? i18n.tf('zipRecordNote', { ok: downloadedCount, skip: skippedTotal })
+        : null;
+
+    // Use Chrome downloads API
+    chrome.downloads.download({
+        url: url,
+        filename: filename,
+        saveAs: false  // Download directly without prompting
+    }, (downloadId) => {
+        if (chrome.runtime.lastError) {
+            debug.error('Download failed:', chrome.runtime.lastError.message);
+            showStatus(i18n.tf('statusDownloadFailed', { error: chrome.runtime.lastError.message }), 'error');
+            chrome.runtime.sendMessage({
+                type: 'record_batch_result',
+                filename: zipFilename,
+                url: activeTab.url,
+                status: 'failed',
+                error: chrome.runtime.lastError.message
+            }).catch(() => {});
+        } else {
+            debug.log('Download started with ID:', downloadId);
+            showStatus(
+                skippedTotal > 0
+                    ? i18n.tf('zipDoneSummary', { ok: downloadedCount, skip: skippedTotal })
+                    : i18n.tf('zipDoneClean', { ok: downloadedCount }),
+                'success');
+            chrome.runtime.sendMessage({
+                type: 'record_batch_result',
+                filename: zipFilename,
+                url: activeTab.url,
+                downloadId: downloadId,
+                note: recordNote
+            }).catch(() => {});
+        }
+
+        // Clean up object URL
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+
+    debug.log('ZIP download completed successfully');
 }
 
 // Fetch image as blob
@@ -1558,546 +1821,6 @@ function getExtensionFromType(type) {
     }
 }
 
-// Create gallery HTML (internationalized)
-async function createGalleryHtml(images, pageTitle) {
-    const title = pageTitle ? i18n.tf('galleryTitle', { title: pageTitle }) : i18n.t('galleryTitleFallback');
-    const locale = i18n.getEffectiveLocale();
-    const langAttr = locale === 'zh_CN' ? 'zh-CN' : 'en';
-    
-    // Get unique file extensions for filter
-    const extensions = [...new Set(images.map(img => {
-        try {
-            const url = new URL(img.url);
-            const ext = url.pathname.split('.').pop().toLowerCase();
-            return ext && ext.length <= 4 ? ext : 'unknown';
-        } catch {
-            return 'unknown';
-        }
-    }))].sort();
-
-    const openInNewTabText = i18n.t('galleryOpenInNewTab');
-
-    const imageHtml = images.map((image, index) => {
-        const alt = image.alt || i18n.tf('galleryImageAlt', { index: index + 1 });
-        const dimensions = `${Math.round(image.width)}x${Math.round(image.height)}`;
-        const fileExt = (() => {
-            try {
-                const url = new URL(image.url);
-                const ext = url.pathname.split('.').pop().toLowerCase();
-                return ext && ext.length <= 4 ? ext : 'unknown';
-            } catch {
-                return 'unknown';
-            }
-        })();
-        
-        return `
-            <div class="gallery-item" data-width="${image.width}" data-height="${image.height}" data-ext="${fileExt}">
-                <img src="${image.url}" alt="${alt}" loading="lazy">
-                <div class="image-info">
-                    <div class="image-title">${alt}</div>
-                    <div class="image-meta">
-                        <span class="image-type">${image.type.toUpperCase()}</span>
-                        <span class="image-dimensions">${dimensions}</span>
-                        <span class="image-ext">${fileExt.toUpperCase()}</span>
-                    </div>
-                    <a href="${image.url}" target="_blank" class="download-link">${openInNewTabText}</a>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
-    const foundText = i18n.tf('galleryFound', { total: images.length, visible: `<span id="visibleCount">${images.length}</span>` });
-    const tipText = i18n.t('galleryTip');
-    const filterBySizeLabel = i18n.t('galleryFilterBySize');
-    const widthLabel = i18n.t('galleryWidth');
-    const heightLabel = i18n.t('galleryHeight');
-    const filterByExtLabel = i18n.t('galleryFilterByExt');
-    const resetFiltersText = i18n.t('galleryResetFilters');
-    const zipDownloadText = i18n.t('galleryZipDownload');
-    const corsWarningText = i18n.t('galleryCorsWarning');
-    const footerLine1 = i18n.tf('galleryFooterLine1', { version: EXTENSION_VERSION });
-    const footerLine2 = i18n.t('galleryFooterLine2');
-    
-    // Inline gallery script translations (serialized into the generated page)
-    const gt = i18n.translations[locale] || i18n.translations.en;
-
-    // 内联嵌入 JSZip（data URL 页面无法加载扩展资源）
-    let jszipCode = '';
-    try {
-        const resp = await fetch(chrome.runtime.getURL('jszip.min.js'));
-        jszipCode = await resp.text();
-    } catch (e) {
-        debug.warn('Failed to load JSZip for gallery:', e);
-    }
-
-    return `
-        <!DOCTYPE html>
-        <html lang="${langAttr}">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>${title}</title>
-            <script>${jszipCode}</script>
-            <style>
-                body {
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    margin: 0;
-                    padding: 20px;
-                    background-color: #f5f5f5;
-                }
-                .header {
-                    text-align: center;
-                    margin-bottom: 30px;
-                }
-                .header h1 {
-                    color: #333;
-                    margin: 0 0 10px 0;
-                }
-                .header p {
-                    color: #666;
-                    margin: 0;
-                }
-                .controls {
-                    max-width: 1200px;
-                    margin: 0 auto 20px auto;
-                    background: white;
-                    padding: 20px;
-                    border-radius: 8px;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                }
-                .filter-section {
-                    margin-bottom: 15px;
-                }
-                .filter-section label {
-                    display: block;
-                    font-weight: 600;
-                    margin-bottom: 8px;
-                    color: #333;
-                }
-                .size-filter {
-                    display: flex;
-                    gap: 10px;
-                    align-items: center;
-                    margin-bottom: 15px;
-                }
-                .size-filter input {
-                    width: 80px;
-                    padding: 4px 8px;
-                    border: 1px solid #ddd;
-                    border-radius: 4px;
-                }
-                .extension-filters {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 10px;
-                    margin-bottom: 15px;
-                }
-                .ext-checkbox {
-                    display: flex;
-                    align-items: center;
-                    gap: 5px;
-                }
-                .ext-checkbox input {
-                    margin: 0;
-                }
-                .action-buttons {
-                    display: flex;
-                    gap: 10px;
-                }
-                .btn {
-                    padding: 8px 16px;
-                    border: none;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-weight: 500;
-                    transition: background 0.2s;
-                }
-                .btn-primary {
-                    background: #1976d2;
-                    color: white;
-                }
-                .btn-primary:hover {
-                    background: #1565c0;
-                }
-                .btn-secondary {
-                    background: #e0e0e0;
-                    color: #333;
-                }
-                .btn-secondary:hover {
-                    background: #d0d0d0;
-                }
-                .gallery {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-                    gap: 20px;
-                    max-width: 1200px;
-                    margin: 0 auto;
-                }
-                .gallery-item {
-                    background: white;
-                    border-radius: 8px;
-                    overflow: hidden;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                    transition: transform 0.2s;
-                }
-                .gallery-item:hover {
-                    transform: translateY(-2px);
-                }
-                .gallery-item.hidden {
-                    display: none;
-                }
-                .gallery-item img {
-                    width: 100%;
-                    height: 200px;
-                    object-fit: cover;
-                    display: block;
-                }
-                .image-info {
-                    padding: 15px;
-                }
-                .image-title {
-                    font-weight: 600;
-                    color: #333;
-                    margin-bottom: 8px;
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-                .image-meta {
-                    display: flex;
-                    gap: 10px;
-                    margin-bottom: 10px;
-                    font-size: 12px;
-                    color: #666;
-                    flex-wrap: wrap;
-                }
-                .image-type, .image-ext {
-                    background: #e1f5fe;
-                    padding: 2px 6px;
-                    border-radius: 3px;
-                    font-weight: 500;
-                }
-                .download-link {
-                    display: inline-block;
-                    background: #1976d2;
-                    color: white;
-                    padding: 6px 12px;
-                    text-decoration: none;
-                    border-radius: 4px;
-                    font-size: 12px;
-                    font-weight: 500;
-                    transition: background 0.2s;
-                }
-                .download-link:hover {
-                    background: #1565c0;
-                }
-                .stats {
-                    text-align: center;
-                    margin-bottom: 20px;
-                    color: #666;
-                }
-                .status {
-                    padding: 10px;
-                    border-radius: 4px;
-                    margin-bottom: 15px;
-                    text-align: center;
-                    font-weight: 500;
-                }
-                .status.info {
-                    background: #e3f2fd;
-                    color: #1976d2;
-                }
-                .status.success {
-                    background: #e8f5e8;
-                    color: #2e7d32;
-                }
-                .status.error {
-                    background: #ffebee;
-                    color: #c62828;
-                }
-                .status.hidden {
-                    display: none;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <h1>${title}</h1>
-                <p class="stats">${foundText}</p>
-                <p style="color: #666; font-size: 14px; margin: 10px 0 0 0;">
-                    ${tipText}
-                </p>
-            </div>
-            
-            <div class="controls">
-                <div class="status hidden" id="status"></div>
-                
-                <div class="filter-section">
-                    <label>${filterBySizeLabel}</label>
-                    <div class="size-filter">
-                        <span>${widthLabel}</span>
-                        <input type="number" id="minWidth" placeholder="Min" min="0">
-                        <span>-</span>
-                        <input type="number" id="maxWidth" placeholder="Max" min="0">
-                        <span>${heightLabel}</span>
-                        <input type="number" id="minHeight" placeholder="Min" min="0">
-                        <span>-</span>
-                        <input type="number" id="maxHeight" placeholder="Max" min="0">
-                    </div>
-                </div>
-                
-                <div class="filter-section">
-                    <label>${filterByExtLabel}</label>
-                    <div class="extension-filters">
-                        ${extensions.map(ext => `
-                            <div class="ext-checkbox">
-                                <input type="checkbox" id="ext-${ext}" value="${ext}" checked>
-                                <label for="ext-${ext}">${ext.toUpperCase()}</label>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-                
-                <div class="action-buttons">
-                    <button class="btn btn-primary" id="resetFiltersBtn">${resetFiltersText}</button>
-                    <button class="btn btn-secondary" id="downloadZipBtn">${zipDownloadText}</button>
-                </div>
-                
-                <div class="download-info" style="margin-top: 15px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; font-size: 12px; color: #856404;">
-                    ${corsWarningText}
-                </div>
-            </div>
-            
-            <div class="gallery" id="gallery">
-                ${imageHtml}
-            </div>
-            
-            <footer style="margin-top: 40px; padding: 20px; text-align: center; border-top: 1px solid #e0e0e0; background-color: #f8f9fa; color: #6c757d; font-size: 11px;">
-                <p style="margin: 0 0 5px 0;">
-                    ${footerLine1}
-                </p>
-                <p style="margin: 0; font-style: italic;">
-                    ${footerLine2}
-                </p>
-            </footer>
-            
-            <script>
-                // Debug wrapper for gallery page
-                const DEBUG = false;
-                const debug = {
-                    log: (...args) => DEBUG && console.log(...args),
-                    error: (...args) => DEBUG && console.error(...args),
-                    warn: (...args) => DEBUG && console.warn(...args),
-                    info: (...args) => DEBUG && console.info(...args)
-                };
-                
-                const allImages = ${JSON.stringify(images)};
-                let filteredImages = [...allImages];
-                
-                // Gallery page translations (embedded from popup locale)
-                const _gt = ${JSON.stringify(gt)};
-                function gt(key) { return _gt[key] || key; }
-                
-                function showStatus(message, type = 'info') {
-                    const status = document.getElementById('status');
-                    status.textContent = message;
-                    status.className = 'status ' + type;
-                    status.classList.remove('hidden');
-                    
-                    setTimeout(() => {
-                        status.classList.add('hidden');
-                    }, 3000);
-                }
-                
-                function updateVisibleCount() {
-                    const visibleItems = document.querySelectorAll('.gallery-item:not(.hidden)');
-                    document.getElementById('visibleCount').textContent = visibleItems.length;
-                }
-                
-                function applyFilters() {
-                    const minWidth = parseInt(document.getElementById('minWidth').value) || 0;
-                    const maxWidth = parseInt(document.getElementById('maxWidth').value) || Infinity;
-                    const minHeight = parseInt(document.getElementById('minHeight').value) || 0;
-                    const maxHeight = parseInt(document.getElementById('maxHeight').value) || Infinity;
-                    
-                    const enabledExtensions = new Set();
-                    document.querySelectorAll('.ext-checkbox input:checked').forEach(cb => {
-                        enabledExtensions.add(cb.value);
-                    });
-                    
-                    const items = document.querySelectorAll('.gallery-item');
-                    filteredImages = [];
-                    
-                    items.forEach((item, index) => {
-                        const width = parseInt(item.dataset.width);
-                        const height = parseInt(item.dataset.height);
-                        const ext = item.dataset.ext;
-                        
-                        const sizeMatch = width >= minWidth && width <= maxWidth && 
-                                        height >= minHeight && height <= maxHeight;
-                        const extMatch = enabledExtensions.has(ext);
-                        
-                        if (sizeMatch && extMatch) {
-                            item.classList.remove('hidden');
-                            filteredImages.push(allImages[index]);
-                        } else {
-                            item.classList.add('hidden');
-                        }
-                    });
-                    
-                    updateVisibleCount();
-                }
-                
-                async function downloadZip() {
-                    if (filteredImages.length === 0) {
-                        showStatus(gt('galleryNoImagesToDownload'), 'error');
-                        return;
-                    }
-
-                    if (typeof JSZip === 'undefined') {
-                        showStatus(gt('galleryZipFailed'), 'error');
-                        return;
-                    }
-
-                    try {
-                        showStatus(gt('galleryCreatingZip'), 'info');
-
-                        const zip = new JSZip();
-                        const imageFolder = zip.folder('images');
-                        let downloadedCount = 0;
-                        
-                        for (let i = 0; i < filteredImages.length; i++) {
-                            const image = filteredImages[i];
-                            
-                            try {
-                                const response = await fetch(image.url);
-                                if (!response.ok) throw new Error('Failed to fetch');
-                                
-                                const blob = await response.blob();
-                                const filename = generateFilename(image, i);
-                                
-                                imageFolder.file(filename, blob);
-                                downloadedCount++;
-                                
-                                const progressMsg = gt('galleryDownloaded')
-                                    .replace('{count}', downloadedCount)
-                                    .replace(/Downloaded.*?images/, 'Downloaded ' + downloadedCount + '/' + filteredImages.length + ' images...')
-                                    .replace(/\u4E0B\u8F7D.*/, '\u5DF2\u4E0B\u8F7D ' + downloadedCount + '/' + filteredImages.length + ' \u5F20\u56FE\u7247...');
-                                // Fallback: just use simple progress
-                                showStatus(
-                                    downloadedCount + '/' + filteredImages.length +
-                                    (gt('galleryLangHint') || '').includes('zh') ? ' \u5F20\u56FE\u7247...' : ' images...'
-                                , 'info');
-                                showStatus('Downloaded ' + downloadedCount + '/' + filteredImages.length + '...', 'info');
-                            } catch (error) {
-                                debug.warn('Failed to download image:', image.url, error);
-                            }
-                        }
-                        
-                        if (downloadedCount === 0) {
-                            showStatus(gt('galleryNoImagesToDownload'), 'error');
-                            return;
-                        }
-                        
-                        showStatus(gt('galleryGeneratingZip'), 'info');
-                        const zipBlob = await zip.generateAsync({ type: 'blob' });
-                        
-                        const url = URL.createObjectURL(zipBlob);
-                        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                        const filename = 'ih_gallery_images_' + timestamp + '.zip';
-                        
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = filename;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        
-                        setTimeout(() => URL.revokeObjectURL(url), 1000);
-                        
-                        showStatus(gt('galleryZipDownloaded').replace('{count}', downloadedCount), 'success');
-                    } catch (error) {
-                        debug.error('ZIP download failed:', error);
-                        showStatus(gt('galleryZipFailed'), 'error');
-                    }
-                }
-                
-                // Sanitize filename while preserving CJK characters
-                function sanitizeFilename(filename) {
-                    let result = '';
-                    for (let i = 0; i < filename.length; i++) {
-                        const char = filename.charAt(i);
-                        const code = filename.charCodeAt(i);
-                        
-                        if ('<>:"/\\\\|?*'.includes(char)) {
-                            result += '_';
-                        }
-                        else if (code >= 0 && code <= 31 || code === 127) {
-                            result += '_';
-                        }
-                        else {
-                            result += char;
-                        }
-                    }
-                    
-                    return result
-                        .replace(/\\s+/g, '_')
-                        .replace(/_{2,}/g, '_')
-                        .replace(/^_|_$/g, '');
-                }
-                
-                function generateFilename(image, index) {
-                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                    
-                    try {
-                        const url = new URL(image.url);
-                        let filename = url.pathname.split('/').pop();
-                        
-                        if (!filename || !filename.includes('.')) {
-                            const extension = image.url.split('.').pop() || 'jpg';
-                            filename = 'image_' + timestamp + '_' + (index + 1) + '.' + extension;
-                        }
-                        
-                        return sanitizeFilename(filename);
-                    } catch {
-                        return 'image_' + timestamp + '_' + (index + 1) + '.jpg';
-                    }
-                }
-                
-                function resetFilters() {
-                    document.getElementById('minWidth').value = '';
-                    document.getElementById('maxWidth').value = '';
-                    document.getElementById('minHeight').value = '';
-                    document.getElementById('maxHeight').value = '';
-                    
-                    document.querySelectorAll('.ext-checkbox input').forEach(cb => {
-                        cb.checked = true;
-                    });
-                    
-                    applyFilters();
-                }
-                
-                // Event listeners
-                document.getElementById('downloadZipBtn').addEventListener('click', downloadZip);
-                document.getElementById('resetFiltersBtn').addEventListener('click', resetFilters);
-                
-                // Filter inputs
-                ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'].forEach(id => {
-                    document.getElementById(id).addEventListener('input', applyFilters);
-                });
-                
-                document.querySelectorAll('.ext-checkbox input').forEach(cb => {
-                    cb.addEventListener('change', applyFilters);
-                });
-                
-                // Initial filter application
-                applyFilters();
-            </script>
-        </body>
-        </html>
-    `;
-}
-
 // Initialize when DOM is loaded (or immediately if already loaded — important for
 // Chrome popups where DOMContentLoaded may fire before scripts attach the listener)
 async function bootstrapPopup() {
@@ -2153,7 +1876,12 @@ async function resetAllSettings() {
     try {
         // Clear all extension settings
         await chrome.storage.sync.clear();
-        
+        // local 里的模板/分隔符副本一并清除（否则会被回读逻辑恢复），
+        // 下载记录（ih_download_history）不属于设置，保留
+        await chrome.storage.local.remove(['ih_filename_template', 'ih_active_separator']);
+        // 主题恢复跟随系统
+        applyTheme('auto');
+
         // Reinitialize popup with default values
         await initializePopup();
         

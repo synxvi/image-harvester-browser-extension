@@ -18,8 +18,60 @@
     --danger-light: #FFEBEE;
     --success: #2D8B4E;
     --success-light: #E8F5ED;
+    --toggle-track: #D4CCC0;
+    --toggle-knob: #FFFFFF;
+    --capsule-track: #F5E0DC;
     --radius: 10px;
     --radius-sm: 8px;
+}
+
+/* === 主题切换（跟随系统，可被 ih_theme 手动覆盖）===
+   dark 变量组在两种条件下生效：系统深色且未强制浅色（:not([data-theme=light])），
+   或手动深色（[data-theme="dark"]）。两块内容需保持一致。
+   组件级颜色走 --toggle-* / --capsule-* 变量，主体变量被下方两块覆盖。 */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #1E1C18;
+        --surface: #262420;
+        --surface-raised: #2B2822;
+        --surface-dim: #322E28;
+        --border: #3D3931;
+        --border-hover: #554E42;
+        --text: #ECE7DD;
+        --text-secondary: #C4BDB0;
+        --text-muted: #8C857A;
+        --accent: #E8A817;
+        --accent-light: #3A3118;
+        --accent-hover: #F5BC38;
+        --danger: #FF6659;
+        --danger-light: #3A2320;
+        --success: #5BBF82;
+        --success-light: #223528;
+        --toggle-track: #4A4438;
+        --toggle-knob: #ECE7DD;
+        --capsule-track: #4A3430;
+    }
+}
+:root[data-theme="dark"] {
+    --bg: #1E1C18;
+    --surface: #262420;
+    --surface-raised: #2B2822;
+    --surface-dim: #322E28;
+    --border: #3D3931;
+    --border-hover: #554E42;
+    --text: #ECE7DD;
+    --text-secondary: #C4BDB0;
+    --text-muted: #8C857A;
+    --accent: #E8A817;
+    --accent-light: #3A3118;
+    --accent-hover: #F5BC38;
+    --danger: #FF6659;
+    --danger-light: #3A2320;
+    --success: #5BBF82;
+    --success-light: #223528;
+    --toggle-track: #4A4438;
+    --toggle-knob: #ECE7DD;
+    --capsule-track: #4A3430;
 }
 
 /* === 基础重置 === */
@@ -31,6 +83,16 @@ body {
     width: 340px;
     background: var(--bg);
     color: var(--text);
+    line-height: 1.4;
+}
+
+/* 表单控件行高钉死：button/select/input 的行高默认为 normal（随字体度量
+   变化），中英文字体度量不同会导致切换语言时控件高度抖动（如三个 tab
+   面板英文下变矮）；显式行高让两种语言渲染出一致高度 */
+button,
+select,
+input[type="text"],
+input[type="number"] {
     line-height: 1.4;
 }
 
@@ -82,24 +144,69 @@ header h1 {
     white-space: nowrap;
     letter-spacing: -0.01em;
 }
-.header-right select {
-    background: rgba(0, 0, 0, 0.1);
-    color: #1A1A1A;
-    border: none;
-    border-radius: 6px;
-    padding: 3px 6px;
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    outline: none;
-    appearance: none;
-    -webkit-appearance: none;
-    width: 58px;
-    text-align: center;
+/* 外观选区（语言/主题）行 */
+.appearance-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0;
 }
-.header-right select option {
-    background: #FFFFFF;
+.card-title-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 8px 0 4px 0;
+}
+
+/* 分段滑块（语言/主题等三段选择）：一行等分段，选中段由滑块背景指示 */
+.seg-slider {
+    position: relative;
+    display: flex;
+    flex: 1;
+    background: var(--surface-dim);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 3px;
+    user-select: none;
+}
+.seg-slider-thumb {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc((100% - 6px) / 3);
+    background: var(--accent);
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 0;
+}
+.seg-item {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 4px 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.2s ease;
+}
+.seg-item input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+.seg-item:has(input:checked) {
     color: #1A1A1A;
+    font-weight: 600;
+}
+.seg-item:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-radius: 6px;
 }
 
 /* === 标签导航 === */
@@ -211,7 +318,7 @@ main {
     position: absolute;
     cursor: pointer;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: #D4CCC0;
+    background: var(--toggle-track);
     border-radius: 24px;
     transition: background 0.25s ease;
 }
@@ -222,7 +329,7 @@ main {
     width: 14px;
     left: 3px;
     bottom: 3px;
-    background: white;
+    background: var(--toggle-knob);
     border-radius: 50%;
     transition: transform 0.25s ease;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
@@ -256,7 +363,7 @@ main {
     width: 60px;
     height: 26px;
     border-radius: 20px;
-    background: #F5E0DC;
+    background: var(--capsule-track);
     transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
 }
@@ -288,7 +395,7 @@ main {
     width: 28px;
     height: 22px;
     border-radius: 11px;
-    background: #E53935;
+    background: var(--danger);
     box-shadow: 0 1px 3px rgba(229, 57, 53, 0.25);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
                 background 0.3s cubic-bezier(0.4, 0, 0.2, 1),
@@ -297,7 +404,7 @@ main {
 }
 /* 选中态 (On) — 滑块滑到右边 */
 .capsule-toggle input:checked + .capsule-track {
-    background: #C8E6D0;
+    background: var(--success-light);
 }
 .capsule-toggle input:checked + .capsule-track .capsule-off {
     color: #7BA88A;
@@ -421,6 +528,15 @@ main {
     cursor: not-allowed;
     pointer-events: none;
 }
+/* ZIP 进行中的「取消」模式：红色系提示这是中止操作 */
+.bulk-btn.cancel-mode {
+    background: var(--danger-light);
+    color: var(--danger);
+}
+.bulk-btn.cancel-mode:hover {
+    background: var(--danger);
+    color: #fff;
+}
 
 /* === 交互设置 === */
 .interaction-control {
@@ -521,6 +637,11 @@ main {
     font-size: 11px;
     color: var(--text-muted);
     line-height: 1.4;
+}
+/* 紧跟小标题的帮助文字：贴紧标题（负 margin 抵消标题 8px 下边距的折叠），
+   与下方内容拉开距离 */
+.card-title + .help-text {
+    margin: -5px 0 12px 0;
 }
 
 /* === 域名行 === */
@@ -650,15 +771,22 @@ input[type="number"]:focus {
 
 /* === 颜色选择器 === */
 .border-color-picker {
-    width: 28px;
-    height: 22px;
-    border: none;
-    border-radius: var(--radius-sm);
+    width: 34px;
+    height: 24px;
     padding: 0;
+    border: none;
+    background: none;
     cursor: pointer;
     vertical-align: middle;
     margin-left: 6px;
-    flex-shrink: 0;
+}
+/* 色块本体：去掉 Chrome 默认内边距，贴合成近长方形的小圆角 */
+.border-color-picker::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+.border-color-picker::-webkit-color-swatch {
+    border: 1px solid var(--border);
+    border-radius: 5px;
 }
 
 /* === 隐藏容器 === */
@@ -824,6 +952,7 @@ footer {
 }
 .status.success { color: var(--success); }
 .status.error { color: var(--danger); }
+.status.info { color: var(--accent); }
 .version {
     font-size: 11px;
     color: var(--text-muted);
@@ -881,6 +1010,19 @@ footer {
     border-radius: 4px;
     word-break: break-all;
 }
+.template-preview-row {
+    display: flex;
+    gap: 5px;
+    align-items: baseline;
+    margin: 4px 0 0 0;
+}
+.template-preview-row .template-preview {
+    flex: 1;
+}
+.template-preview.empty {
+    color: var(--text-muted);
+    font-family: inherit;
+}
 
 /* === 下载记录列表 === */
 .dl-history-header {
@@ -905,6 +1047,19 @@ footer {
 .dl-clear-btn:hover {
     color: var(--danger);
     background: var(--danger-light);
+}
+.dl-header-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+/* 「重试全部失败」：强调色，区别于清空的危险色 */
+.dl-clear-btn.dl-retry-all {
+    color: var(--accent);
+}
+.dl-clear-btn.dl-retry-all:hover {
+    color: var(--accent-hover);
+    background: var(--accent-light);
 }
 .dl-history-list {
     margin-top: 8px;
@@ -938,6 +1093,29 @@ footer {
     width: 7px;
     height: 7px;
     border-radius: 50%;
+}
+/* 来源徽章：悬浮按钮为常态（弱化灰），右键/批量用强调色区分 */
+.dl-source {
+    flex: none;
+    font-size: 9px;
+    line-height: 1;
+    padding: 3px 5px;
+    border-radius: 4px;
+    background: var(--surface-dim);
+    color: var(--text-muted);
+}
+.dl-source-context,
+.dl-source-zip {
+    background: var(--danger-light);
+    color: var(--danger);
+}
+/* 浏览器原生下载：金色系，与所有扩展发起的下载醒目区分 */
+.dl-source-browser {
+    background: var(--accent-light);
+    color: var(--accent);
+}
+.dl-source-other {
+    /* 未知来源保持中性 */
 }
 .dl-pending .dl-dot {
     background: var(--accent);
@@ -974,6 +1152,10 @@ footer {
 }
 .dl-failed:hover .dl-name {
     text-decoration: underline;
+}
+/* 成功条目可点击打开所在目录 */
+.dl-success {
+    cursor: pointer;
 }
 .dl-time {
     flex: none;
