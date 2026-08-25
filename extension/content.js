@@ -624,9 +624,24 @@ document.addEventListener('click', (e) => {
     // 此时点击放大同样会触发查看器重构，必须同样建立上下文。
     let rootImg = currentImage || haloTarget;
     if (!rootImg && e.target instanceof Element) {
+        // 第三级回退：点击目标自身/祖先链上的 IMG。注意祖先链上没有 IMG 不代表
+        // 不是图片点击——覆盖层(如 Discourse 底栏 .meta)是 <img> 的兄弟节点，
+        // 祖先链里只有容纳它们的 <a>/<div>；此时检查每个祖先容器内的 IMG，
+        // 取与点击位置空间重叠(≥50%)者作为目标图片。
         let n = e.target;
         while (n && n !== document) {
             if (n.tagName === 'IMG') { rootImg = n; break; }
+            if (n.querySelector) {
+                const inner = n.querySelector('img');
+                if (inner) {
+                    const innerRect = inner.getBoundingClientRect();
+                    const targetRectN = e.target.getBoundingClientRect();
+                    if (rectsOverlapRatio(targetRectN, innerRect) >= 0.5) {
+                        rootImg = inner;
+                        break;
+                    }
+                }
+            }
             n = n.parentNode;
         }
     }
