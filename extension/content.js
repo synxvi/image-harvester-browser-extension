@@ -580,6 +580,19 @@ document.addEventListener('mousemove', (e) => {
 const POST_CLICK_CONTEXT_MS = 1500; // 上下文有效期：覆盖查看器打开/缩放动画的全程
 let postClickMutObserver = null;
 
+// 两个矩形的空间重叠度：交集面积 ÷ 两者中较小者的面积（0~1）。
+// 用于识别「渲染在图片内部但 DOM 上无父子关系的覆盖层」点击，如 Discourse
+// 图片底栏（名称/分辨率条）：<img> 是叶子元素不可能包含子节点，底栏必为兄弟
+// 覆盖层，点击它同样会触发查看器放大。
+function rectsOverlapRatio(a, b) {
+    const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+    const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    if (ix <= 0 || iy <= 0) return 0;
+    const inter = ix * iy;
+    const smaller = Math.min(a.width * a.height, b.width * b.height);
+    return smaller > 0 ? inter / smaller : 0;
+}
+
 function discardPostClickContext() {
     if (postClickMutObserver) {
         postClickMutObserver.disconnect();
@@ -617,10 +630,16 @@ document.addEventListener('click', (e) => {
             n = n.parentNode;
         }
     }
+    const targetRect = (e.target instanceof Element) ? e.target.getBoundingClientRect() : null;
+    const rootRect = rootImg ? rootImg.getBoundingClientRect() : null;
+    // 覆盖层点击（图片底栏/角标等渲染在图内、DOM 上无父子关系的元素）：
+    // 与图片空间重叠度 ≥50% 即视为点在该图上
+    const overlapsRoot = !!(targetRect && rootRect && rectsOverlapRatio(targetRect, rootRect) >= 0.5);
     const onCurrentImage = !!(rootImg && (
         rootImg === e.target ||
         rootImg.contains(e.target) ||
-        e.target.contains(rootImg)
+        e.target.contains(rootImg) ||
+        overlapsRoot
     ));
     discardPostClickContext();
     if (onCurrentImage) {
