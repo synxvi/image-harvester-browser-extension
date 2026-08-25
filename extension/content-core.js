@@ -55,6 +55,9 @@ let isMouseOverButton = false; // Guard flag: prevents hiding while cursor is ov
 let isMouseOverImage = false; // Guard flag: prevents hiding while cursor is over the image
 let glowTimer = null; // Tracks the pending glow timer
 let hideTimer = null; // Tracks the pending hide timer so re-enter can cancel it
+// 「点击上下文」：刚在当前图片上发生过左键点击时的短暂记忆，用于识别点击引发的
+// DOM 重构抖动（查看器复用帖子 <img> reparent/换 src），见 content.js click 处理器
+let postClickContext = null;
 let imageResizeObserver = null;   // ResizeObserver：跟踪当前图片尺寸变化
 let imageMutationObserver = null; // MutationObserver：跟踪当前图片 src 属性变化
 
@@ -66,6 +69,8 @@ let haloResizeObserver = null;     // 监听目标尺寸变化，同步 halo 大
 let haloMutationObserver = null;   // 监听目标 src/属性变化，同步 halo 大小
 let haloScrollHandler = null;      // 滚动时重定位（capture 阶段，捕获所有滚动容器）
 let haloResizeHandler = null;      // 窗口尺寸变化时重定位
+let haloAwaitingStable = false;    // halo 已挂载但目标矩形未稳定（lightbox 入场动画/原图加载中），暂缓点亮
+let haloStabilizeRAF = null;       // 「等待矩形稳定」的 rAF 循环句柄
 
 // Multi-path download settings
 let multiPathEnabled = false;

@@ -324,10 +324,26 @@ function triggerHoverDetection(rawElement) {
         && lastCursorX >= oldRect.left && lastCursorX <= oldRect.right
         && lastCursorY >= oldRect.top && lastCursorY <= oldRect.bottom;
 
+    // 「点击后 DOM 重构」抑制：满足以下条件时禁用 0ms 快速跟随，强制走完整延迟，
+    // 由 halo 的「矩形连续稳定才点亮」机制等查看器入场动画结束、图片放大定稿后再亮：
+    //   ① 刚在当前图片上发生过左键点击（postClickContext 未过期）；
+    //   ② 点击的不是悬浮按钮（click 处理器对按钮直接跳过，不会建立上下文）；
+    //   ③ 点击确实引发了 DOM 改变（上下文窗口内 MutationObserver 置位；
+    //      无变化的普通站点不受影响，快速跟随时机与 v1.7.0 行为一致）。
+    // 背景：linux.do/Discourse 的 PhotoSwipe 查看器会复用帖子 <img>（reparent 或
+    // clone + 换高清 src），点击后几毫秒内新图被送回光标下触发 mouseenter；若照常
+    // 快速跟随，halo 会在动画启动前的静止间隙以原缩略图位置/尺寸点亮 = 闪烁。
+    // 注意：这里刻意不比对目标节点与点击节点是否同一——查看器可能 clone 节点，
+    // 节点同一性不可靠；窗口仅 1.5 秒，期间真实换图悬停最多多等一个完整延迟，无感。
+    const suppressFastFollow = !!(postClickContext
+        && postClickContext.domChanged
+        && performance.now() - postClickContext.time < POST_CLICK_CONTEXT_MS);
+    const fastFollow = alreadyActive && !suppressFastFollow;
+
     // Set timer for download button
     hoverTimer = setTimeout(() => {
         showDownloadButton(element);
-    }, alreadyActive ? 0 : hoverDelay);
+    }, fastFollow ? 0 : hoverDelay);
 
     // Set separate timer for glow effect
     // 已激活时同样跳过 glowDelay，与按钮同步立即跟随到新图。
@@ -335,7 +351,7 @@ function triggerHoverDetection(rawElement) {
         clearTimeout(glowTimer);
         glowTimer = setTimeout(() => {
             toggleBorderHighlight(element, true);
-        }, alreadyActive ? 0 : glowDelay);
+        }, fastFollow ? 0 : glowDelay);
     }
 }
 
@@ -554,6 +570,88 @@ let lastCursorY = -1;
 document.addEventListener('mousemove', (e) => {
     lastCursorX = e.clientX;
     lastCursorY = e.clientY;
+}, true);
+
+// ===== 点击上下文（识别「点击引发 DOM 重构」场景，消除查看器打开时的高亮闪烁）=====
+// 满足以下三条时抑制 halo 的 0ms 快速跟随，等图片放大、视图稳定后再显示：
+//   ① 在目标图片上产生过左键点击；
+//   ② 点击的不是悬浮按钮/工具栏；
+//   ③ 点击造成了 DOM 改变（窗口内 MutationObserver 置位）。
+const POST_CLICK_CONTEXT_MS = 1500; // 上下文有效期：覆盖查看器打开/缩放动画的全程
+let postClickMutObserver = null;
+
+function discardPostClickContext() {
+    if (postClickMutObserver) {
+        postClickMutObserver.disconnect();
+        postClickMutObserver = null;
+    }
+    postClickContext = null;
+}
+
+document.addEventListener('click', (e) => {
+    if (e.button !== 0) return;
+
+    // 条件②：点在悬浮按钮/工具栏上 → 完全不介入（下载按钮有自己的 click 处理器）
+    let node = e.target;
+    while (node && node !== document) {
+        if (node.classList && (
+            node.classList.contains('ih-download-btn') ||
+            node.classList.contains('ih-download-toolbar') ||
+            node.classList.contains('ih-toolbar-btn')
+        )) {
+            return;
+        }
+        node = node.parentNode;
+    }
+
+    // 条件①：点击发生在「目标图片」上。目标图片按反馈状态取：
+    // 按钮已显示(悬停≥hoverDelay) → currentImage；仅高亮已亮(glowDelay~hoverDelay) →
+    // haloTarget；两者都未出现(悬停不足 glowDelay 就点击) → 点击目标自身/祖先链的 IMG。
+    // 不能只依赖 currentImage：悬停不足 1 秒时按钮尚未创建，currentImage 为空，
+    // 此时点击放大同样会触发查看器重构，必须同样建立上下文。
+    let rootImg = currentImage || haloTarget;
+    if (!rootImg && e.target instanceof Element) {
+        let n = e.target;
+        while (n && n !== document) {
+            if (n.tagName === 'IMG') { rootImg = n; break; }
+            n = n.parentNode;
+        }
+    }
+    const onCurrentImage = !!(rootImg && (
+        rootImg === e.target ||
+        rootImg.contains(e.target) ||
+        e.target.contains(rootImg)
+    ));
+    discardPostClickContext();
+    if (onCurrentImage) {
+        postClickContext = { root: rootImg, time: performance.now(), domChanged: false };
+        // 条件③：窗口内监测 DOM 是否真的因点击改变（查看器插入/reparent/换 src）
+        postClickMutObserver = new MutationObserver(() => {
+            if (postClickContext) postClickContext.domChanged = true;
+        });
+        postClickMutObserver.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['src']
+        });
+        setTimeout(() => {
+            if (postClickContext
+                && performance.now() - postClickContext.time >= POST_CLICK_CONTEXT_MS) {
+                discardPostClickContext();
+            }
+        }, POST_CLICK_CONTEXT_MS + 50);
+    }
+
+    // 点击瞬间收掉挂起的反馈：Chrome 只在鼠标移动后才派发 mouseleave，
+    // 若等它清理，旧图上的高光会以其最大 z-index 浮在查看器遮罩之上形成残影。
+    // 判断依据是 halo/定时器自身的存活状态而非 currentImage —— glowDelay(500ms)
+    // 小于 hoverDelay(1000ms)，hover 后半秒就点击时按钮尚未创建但 halo 已亮起。
+    if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+    if (glowTimer) { clearTimeout(glowTimer); glowTimer = null; }
+    if (haloTarget || haloOverlay) {
+        toggleBorderHighlight(haloTarget, false);
+    }
 }, true);
 
 document.addEventListener('mouseenter', handleMouseEnter, true);

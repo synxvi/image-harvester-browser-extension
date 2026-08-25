@@ -156,7 +156,7 @@ function positionHaloOverlay() {
         haloOverlay.style.display = 'none';
         return;
     }
-    haloOverlay.style.display = 'block';
+    haloOverlay.style.display = haloAwaitingStable ? 'none' : 'block';
     haloOverlay.style.transform = `translate(${rect.left}px, ${rect.top}px)`;
     haloOverlay.style.width = rect.width + 'px';
     haloOverlay.style.height = rect.height + 'px';
@@ -169,6 +169,68 @@ function positionHaloOverlay() {
     } catch (e) {
         haloOverlay.style.borderRadius = '0px';
     }
+}
+
+// 取消「等待矩形稳定」循环并复位隐藏标志（halo 销毁/重建时调用）
+function cancelHaloStabilizeWait() {
+    if (haloStabilizeRAF != null) {
+        cancelAnimationFrame(haloStabilizeRAF);
+        haloStabilizeRAF = null;
+    }
+    haloAwaitingStable = false;
+}
+
+// halo 新建后的防闪烁点亮：逐帧比对目标矩形，连续稳定后才真正显示。
+// 背景：点击缩略图弹出 lightbox/查看器时（如 Discourse 点图放大），新大图入场瞬间
+// rect 是过渡态——入场 transform 动画中间值，或先按缩略图占位布局、原图加载完成后
+// 才定稿。若立即点亮，高光会以「原先小图」的尺寸闪现一次再跳到大图尺寸。
+// 正常悬停场景图片早已静止，首帧即判定稳定，仅增加约一帧延迟（glowDelay 本就 500ms，无感）。
+const HALO_STABLE_FRAMES = 3;      // 需连续稳定的帧数
+const HALO_STABLE_EPSILON = 0.25;  // 视为「不变」的坐标误差（px）
+const HALO_STABLE_TIMEOUT = 1000;  // 稳定等待上限：超时按最新矩形显示，后续仍由观察器校准
+// 点击重构场景（查看器入场/缩放动画）的最短观察期：ease-out 尾段每帧位移极小，
+// 仅凭帧间差会被误判为已稳定；多观察一段时间确保动画真正结束、尺寸定稿。
+const HALO_STABLE_MIN_OBSERVE_CLICK = 200;
+
+function scheduleHaloWhenStable() {
+    cancelHaloStabilizeWait();
+    haloAwaitingStable = true;
+    const start = performance.now();
+    // 仅点击重构场景要求最短观察期；普通悬停场景图片早已静止，无需额外等待
+    const minObserve = (postClickContext && postClickContext.domChanged)
+        ? HALO_STABLE_MIN_OBSERVE_CLICK
+        : 0;
+    let last = null;
+    let stableCount = 0;
+    const tick = () => {
+        if (!haloOverlay || !haloTarget) {
+            // 等待期间被销毁/切换目标，放弃点亮
+            haloStabilizeRAF = null;
+            return;
+        }
+        const rect = haloTarget.getBoundingClientRect();
+        if (
+            last &&
+            Math.abs(rect.left - last.left) < HALO_STABLE_EPSILON &&
+            Math.abs(rect.top - last.top) < HALO_STABLE_EPSILON &&
+            Math.abs(rect.width - last.width) < HALO_STABLE_EPSILON &&
+            Math.abs(rect.height - last.height) < HALO_STABLE_EPSILON
+        ) {
+            stableCount++;
+        } else {
+            stableCount = 0;
+            last = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+        }
+        if ((stableCount >= HALO_STABLE_FRAMES && performance.now() - start >= minObserve)
+            || performance.now() - start >= HALO_STABLE_TIMEOUT) {
+            haloStabilizeRAF = null;
+            haloAwaitingStable = false;
+            positionHaloOverlay();
+            return;
+        }
+        haloStabilizeRAF = requestAnimationFrame(tick);
+    };
+    haloStabilizeRAF = requestAnimationFrame(tick);
 }
 
 // 为 halo 目标挂载跟随观察器（尺寸/属性/滚动/缩放）
@@ -214,6 +276,7 @@ function detachHaloObservers() {
 
 // 完全销毁 halo 浮层（DOM + 观察器 + 目标引用）
 function destroyHaloOverlay() {
+    cancelHaloStabilizeWait();
     detachHaloObservers();
     if (haloOverlay && haloOverlay.parentNode) {
         haloOverlay.parentNode.removeChild(haloOverlay);
@@ -243,7 +306,7 @@ function toggleBorderHighlight(element, show) {
     }
 
     // 切换到新目标：先销毁旧的，保证任意时刻至多一个 halo
-    destroyHaloOverlay();
+    destroyHaloOverlay('switch-target');
 
     const overlay = document.createElement('div');
     overlay.className = 'ih-halo-overlay';
@@ -252,7 +315,9 @@ function toggleBorderHighlight(element, show) {
 
     haloOverlay = overlay;
     haloTarget = element;
-    positionHaloOverlay();
+    // 防闪烁：先隐藏挂载，等目标矩形稳定（lightbox 入场动画/原图加载结束）后再点亮
+    scheduleHaloWhenStable();
+    positionHaloOverlay(); // 仅预写几何，display 由 awaiting 标志压住保持隐藏
     attachHaloObservers(element);
 }
 
