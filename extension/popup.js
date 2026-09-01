@@ -313,8 +313,8 @@ async function renderDownloadHistory() {
         dot.className = 'dl-dot';
         dot.title = i18n.t(statusKey);
 
-        // 来源徽章：区分悬浮按钮 / 右键菜单 / 批量 ZIP / 画廊 / 浏览器原生下载（老记录无字段按悬浮按钮）
-        const SOURCE_LABEL_KEYS = { hover: 'dlSourceHover', context: 'dlSourceContext', zip: 'dlSourceZip', gallery: 'dlSourceGallery', browser: 'dlSourceBrowser' };
+        // 来源徽章：区分悬浮按钮 / 右键菜单 / 批量 ZIP / 画廊（老记录无字段按悬浮按钮）
+        const SOURCE_LABEL_KEYS = { hover: 'dlSourceHover', context: 'dlSourceContext', zip: 'dlSourceZip', gallery: 'dlSourceGallery' };
         const sourceKey = SOURCE_LABEL_KEYS[rec.source] || 'dlSourceOther';
         const sourceLabel = i18n.t(sourceKey);
         const badge = document.createElement('span');

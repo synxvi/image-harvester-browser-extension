@@ -1109,11 +1109,6 @@ footer {
     background: var(--danger-light);
     color: var(--danger);
 }
-/* 浏览器原生下载：金色系，与所有扩展发起的下载醒目区分 */
-.dl-source-browser {
-    background: var(--accent-light);
-    color: var(--accent);
-}
 .dl-source-other {
     /* 未知来源保持中性 */
 }

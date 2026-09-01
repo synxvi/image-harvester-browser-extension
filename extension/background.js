@@ -343,13 +343,34 @@ async function notifyActiveTabToast(payload) {
     }
 }
 
+// 判定某 downloadId 是否属于本扩展记录在案的下载（悬浮/右键菜单/ZIP/画廊
+// 管线）。终态 toast 只对插件发起的下载提示：浏览器原生下载（另存为、
+// 系统下载的任意文件）不记录也不弹插件通知，交给 Chrome 自带提示。
+async function recordExistsForDownload(downloadId) {
+    if (recordIdByDownloadId.has(downloadId)) return true;
+    try {
+        const data = await chrome.storage.local.get(DOWNLOAD_HISTORY_KEY);
+        const list = Array.isArray(data[DOWNLOAD_HISTORY_KEY]) ? data[DOWNLOAD_HISTORY_KEY] : [];
+        return list.some(r => r.downloadId === downloadId);
+    } catch (e) {
+        return false;
+    }
+}
+
 // 终态 toast 附带最终文件名：downloads.search 取浏览器落盘（含自动改名）的
 // 真实文件名，查不到时无文件名照样提示
 async function notifyDownloadResultToast(downloadId, payload) {
+    // 非本扩展记录的下载直接跳过。批量 ZIP 的记录经 record_batch_result 消息
+    // 补建、可能略晚于终态事件到达，给一次短重查兜底。
+    if (!(await recordExistsForDownload(downloadId))) {
+        await new Promise(resolve => setTimeout(resolve, 400));
+        if (!(await recordExistsForDownload(downloadId))) return;
+    }
     try {
         const items = await chrome.downloads.search({ id: downloadId });
         if (items && items[0] && items[0].filename) {
-            payload.filename = items[0].filename.split(/[\/]/).pop();
+            // items[0].filename 是绝对路径，Windows 为反斜杠分隔，两种分隔符都要按分割
+            payload.filename = items[0].filename.split(/[\\/]/).pop();
         }
     } catch (e) { /* 忽略 */ }
     notifyActiveTabToast(payload);
@@ -682,47 +703,10 @@ async function downloadCanvasImage(dataUrl, filename, pathIndex = -1, tabId = nu
     }
 }
 
-// ====== 浏览器原生图片下载入记录（source='browser'）======
-// Chrome 原生「图片另存为」、网页 <a> 链接点下的图片等不经过扩展，靠
-// downloads.onCreated 全局监听补录。判据：DownloadItem.byExtensionId ——
-// 扩展（本扩展有各自记录管线，其他扩展不相关）发起的下载会带该字段，
-// 原生下载不会，据此精确去重。
-function isImageFilename(name) {
-    return /\.(jpe?g|png|gif|webp|svg|bmp|tiff?|ico|avif|apng|heic)$/i.test(name || '');
-}
-
-chrome.downloads.onCreated.addListener((item) => {
-    try {
-        if (item.byExtensionId) return;
-
-        // 创建时 filename/mime 可能尚未确定，任一信号命中图片即记录
-        const mimeOk = !!(item.mime && item.mime.toLowerCase().startsWith('image/'));
-        const filename = (item.filename || '').split(/[\\/]/).pop();
-        let urlOk = false;
-        const rawUrl = item.finalUrl || item.url || '';
-        try { urlOk = isImageFilename(new URL(rawUrl).pathname); } catch { /* 非法 URL 忽略 */ }
-        if (!mimeOk && !isImageFilename(filename) && !urlOk) return;
-
-        let urlBasename = 'image';
-        try { urlBasename = decodeURIComponent(new URL(rawUrl).pathname.split('/').pop()) || 'image'; } catch { /* 保底 */ }
-
-        recordDownloadStart({
-            filename: filename || urlBasename,
-            url: rawUrl,
-            source: 'browser',
-            mode: 'normal',
-            pathIndex: -1
-        }).then(rec => bindDownloadRecord(rec.id, item.id)).catch(() => {});
-    } catch (e) {
-        debug.warn('记录浏览器原生图片下载失败:', e);
-    }
-});
-
 // 监听下载状态变化：complete → 通知页面 + 记录置成功；
 // interrupted（网络错误/被取消/被安全软件拦截等）→ 通知页面失败 + 记录置失败。
 chrome.downloads.onChanged.addListener((delta) => {
-    // 原生下载创建时 filename 可能为空（另存为对话框/重定向后才确定），
-    // 文件名 delta 到达时补写记录（取 basename，扩展自身记录同样受益于最终名）
+    // 文件名 delta 到达时补写记录的最终名（含浏览器自动改名后的真实名）
     if (delta.filename && delta.filename.current) {
         const finalName = delta.filename.current.split(/[\\/]/).pop();
         if (finalName) patchDownloadRecordByDownloadId(delta.id, { filename: finalName });
