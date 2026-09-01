@@ -55,6 +55,27 @@
     background: rgba(212, 148, 15, 1);
 }
 
+/* ===== 悬浮按钮快速显隐（120ms 淡入淡出） =====
+   只过渡透明度、不动位置：按钮定位仍是 JS 直接吸附（right/top 不过渡），
+   不会重现切图时「贴边再弹上去」的位移动画。 */
+@keyframes ih-btn-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes ih-btn-fade-out {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+}
+
+.ih-download-btn,
+.ih-download-toolbar {
+    animation: ih-btn-fade-in 0.12s ease-out;
+}
+
+/* 淡出由 JS 以 inline style 指定 animation（需覆盖重建场景的 animation='none'），
+   故无需 .ih-btn-fade-out 类。 */
+
 /* ===== Multi-Path Download Toolbar ===== */
 .ih-download-toolbar {
     display: none;

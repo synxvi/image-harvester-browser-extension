@@ -58,6 +58,8 @@ let hideTimer = null; // Tracks the pending hide timer so re-enter can cancel it
 // 「点击上下文」：刚在当前图片上发生过左键点击时的短暂记忆，用于识别点击引发的
 // DOM 重构抖动（查看器复用帖子 <img> reparent/换 src），见 content.js click 处理器
 let postClickContext = null;
+// 查看器打开/缩放动画的全程时长上限（上下文有效期、按钮 rAF 跟随循环共用）
+const POST_CLICK_CONTEXT_MS = 1500;
 let imageResizeObserver = null;   // ResizeObserver：跟踪当前图片尺寸变化
 let imageMutationObserver = null; // MutationObserver：跟踪当前图片 src 属性变化
 

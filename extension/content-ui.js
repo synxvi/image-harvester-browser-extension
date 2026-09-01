@@ -206,9 +206,16 @@ function showDownloadButton(img) {
     // Destroy old button/toolbar only when switching to a different image or first show.
     // 传入新图作为 halo 保留目标：切图时 halo 可能已亮在新图上（glow 500ms < hover 1000ms），
     // 不能误清；其余调用方不传此参数，按钮销毁即同步清理 halo，避免浮层泄漏。
-    hideDownloadButton(img);
+    // 第二参数 true = 重建场景立即移除旧按钮（无淡出）：新旧按钮位置相同时，
+    // 「淡出 + 新建淡入」会造成按钮轻微闪烁（用户实测查看器落位后的残影感）。
+    hideDownloadButton(img, true);
 
     const activePaths = multiPaths.filter(p => p.enabled !== false);
+
+    // 是否为「重建」：之前已有按钮在显示（区别于隐藏后的首次出现）。
+    // 重建场景新按钮跳过淡入动画：与刚被立即移除的旧按钮位置相同/接近时，
+    // 视觉上无级替换，消除查看器落位后「轻微闪烁一下」的残影感。
+    const wasShowing = !!(downloadButton && downloadButton.parentNode);
 
     // Decide: toolbar or single button?
     // Conditions: multi-path enabled + at least 2 active paths.
@@ -227,8 +234,19 @@ function showDownloadButton(img) {
 
     document.body.appendChild(downloadButton);
     positionButton(img, downloadButton);
+    if (wasShowing) {
+        downloadButton.style.animation = 'none';
+    }
     downloadButton.style.display = downloadButton.classList.contains('ih-download-toolbar') ? 'block' : 'flex';
     currentImage = img;
+
+    // 点击上下文窗口内的显示/重建（查看器 clone/替换了图片节点）：以新节点重启
+    // rAF 逐帧跟随，按钮继续钉在图片左上角跟飞，不依赖 ResizeObserver（感知不到
+    // transform 动画的每帧插值），也不再等下一次事件才「跳」到新位置。
+    if (postClickContext
+        && performance.now() - postClickContext.time < POST_CLICK_CONTEXT_MS) {
+        startPostClickFollow();
+    }
 
     // 切图同步迁移 halo：若切换前 halo 已激活（且尚未指向新图），
     // 立即在新图上重建，使其与下载按钮同目标、同尺寸。
@@ -240,18 +258,68 @@ function showDownloadButton(img) {
     attachImageObservers(img);
 }
 
+// ===== 点击后按钮逐帧跟随（rAF 循环） =====
+// 查看器的打开/缩放动画是 transform 变换：ResizeObserver/MutationObserver 都
+// 感知不到（监听的是 content-box 与属性，不含 transform 的每帧插值），按钮会
+// 卡在旧位置、动画结束后才「跳」到新位置。点击后启动本循环，每帧把按钮钉在
+// currentImage 的左上角，视觉上按钮随大图一起飞、动画结束即落位。
+let postClickFollowRAF = null;
+
+function stopPostClickFollow() {
+    if (postClickFollowRAF) {
+        cancelAnimationFrame(postClickFollowRAF);
+        postClickFollowRAF = null;
+    }
+}
+
+function startPostClickFollow() {
+    stopPostClickFollow();
+    const start = performance.now();
+    const tick = () => {
+        // 按钮已销毁/目标已切换/上下文窗口结束 → 停止（之后由常规观察器接管）
+        if (!currentImage || !downloadButton || !downloadButton.parentNode
+            || performance.now() - start > POST_CLICK_CONTEXT_MS) {
+            postClickFollowRAF = null;
+            return;
+        }
+        positionButton(currentImage, downloadButton);
+        if (haloTarget === currentImage) {
+            positionHaloOverlay();
+        }
+        postClickFollowRAF = requestAnimationFrame(tick);
+    };
+    postClickFollowRAF = requestAnimationFrame(tick);
+}
+
 // Hide download button/toolbar
 // preserveHaloTarget: 若 halo 当前正指向该目标则保留（用于 showDownloadButton 切图场景），
 //                     其余场景不传 → 按钮销毁时同步清理 halo，防止浮层在图片被移除/隐藏后残留发光。
-function hideDownloadButton(preserveHaloTarget) {
+function hideDownloadButton(preserveHaloTarget, immediate) {
+    stopPostClickFollow();
     detachImageObservers();
     if (!(preserveHaloTarget && haloTarget === preserveHaloTarget)) {
         destroyHaloOverlay();
     }
     if (downloadButton) {
-        // Remove from DOM to prevent leaks when switching between button and toolbar
-        if (downloadButton.parentNode) {
-            downloadButton.parentNode.removeChild(downloadButton);
+        // 淡出后再移除（0.12s，与 content.css 的 ih-btn-fade-out 同步），显隐更柔和。
+        // pointer-events 立即关闭：淡出期间不再响应 hover/点击（其引用已无效，
+        // 且避免残影期误触 isMouseOverButton 守卫）。局部引用持有节点，
+        // downloadButton 立即置 null，后续 show 不受淡出过程影响。
+        // immediate=true（重建场景）跳过淡出直接移除，避免同位置淡出+淡入的闪烁。
+        const fadingBtn = downloadButton;
+        if (fadingBtn.parentNode) {
+            if (immediate) {
+                fadingBtn.parentNode.removeChild(fadingBtn);
+            } else {
+                fadingBtn.style.pointerEvents = 'none';
+                // inline 指定动画：可能覆盖创建时设置的 animation='none'（重建场景）
+                fadingBtn.style.animation = 'ih-btn-fade-out 0.12s ease-in forwards';
+                setTimeout(() => {
+                    if (fadingBtn.parentNode) {
+                        fadingBtn.parentNode.removeChild(fadingBtn);
+                    }
+                }, 120);
+            }
         }
         downloadButton = null;
     }

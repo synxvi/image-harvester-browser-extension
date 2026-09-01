@@ -276,6 +276,12 @@ function triggerHoverDetection(rawElement) {
         return;
     }
 
+    // 有效接管：确实为图片安排反馈了，才取消「click 后兜底重检」。
+    // 注意不能放在函数开头：查看器打开时的 enter 目标可能是遮罩/容器 div
+    // （如知乎），检测走不到这里就 return，若提前清标志会令 600ms 兜底重检
+    // 被跳过，按钮/halo 从此无人恢复。
+    postClickAwaitingEnter = false;
+
     // Mark cursor as over image — used by hide timers to prevent flicker
     isMouseOverImage = true;
 
@@ -340,10 +346,18 @@ function triggerHoverDetection(rawElement) {
         && performance.now() - postClickContext.time < POST_CLICK_CONTEXT_MS);
     const fastFollow = alreadyActive && !suppressFastFollow;
 
-    // Set timer for download button
+    // 抑制场景（点击重构/查看器动画）：按钮与 halo 用同一延迟**同步**出现。
+    // 延迟目的是等查看器动画，不直接采用 glowDelay（=0 时按钮会 0ms 出现在动画
+    // 中间态上），取 max(glowDelay, 500ms)。例外：兜底重检路径命中时动画已结束
+    // （600ms > 常见动画时长），延迟归零，否则按钮/高光无谓地慢一倍。
+    const SUPPRESS_MIN_DELAY = 500;
+    const contextDelay = postClickRecheckHit ? 0 : Math.max(glowDelay, SUPPRESS_MIN_DELAY);
+
+    // 按钮：抑制场景立即显示（动画中的跟随由 startPostClickFollow 负责），
+    // 用户期望「点击一瞬间按钮就已跑到大图左上角落位」；halo 保持抑制延迟。
     hoverTimer = setTimeout(() => {
         showDownloadButton(element);
-    }, fastFollow ? 0 : hoverDelay);
+    }, (fastFollow || suppressFastFollow) ? 0 : hoverDelay);
 
     // Set separate timer for glow effect
     // 已激活时同样跳过 glowDelay，与按钮同步立即跟随到新图。
@@ -351,7 +365,7 @@ function triggerHoverDetection(rawElement) {
         clearTimeout(glowTimer);
         glowTimer = setTimeout(() => {
             toggleBorderHighlight(element, true);
-        }, fastFollow ? 0 : glowDelay);
+        }, fastFollow ? 0 : (suppressFastFollow ? contextDelay : glowDelay));
     }
 }
 
@@ -405,7 +419,15 @@ function handleMouseLeave(e) {
         hideTimer = null;
     }
 
-    const hideDelay = longHideDelay ? 1500 : 500;
+    const baseHideDelay = longHideDelay ? 1500 : 500;
+
+    // 点击重构场景（查看器打开动画期间）：延长隐藏等待到上下文有效期，
+    // 防止按钮/halo 的重现定时器（glowDelay）到点前就被这里清场，导致
+    // 之后必须等新的鼠标动作才会重新出现。窗口内新的 mouseenter 会以
+    // isMouseOverImage 守卫正常接管。
+    const inClickContext = !!(postClickContext && postClickContext.domChanged
+        && performance.now() - postClickContext.time < POST_CLICK_CONTEXT_MS);
+    const hideDelay = inClickContext ? POST_CLICK_CONTEXT_MS : baseHideDelay;
 
     // Hide button after delay based on settings
     hideTimer = setTimeout(() => {
@@ -577,7 +599,16 @@ document.addEventListener('mousemove', (e) => {
 //   ① 在目标图片上产生过左键点击；
 //   ② 点击的不是悬浮按钮/工具栏；
 //   ③ 点击造成了 DOM 改变（窗口内 MutationObserver 置位）。
-const POST_CLICK_CONTEXT_MS = 1500; // 上下文有效期：覆盖查看器打开/缩放动画的全程
+// 注意：该抑制只针对 halo（防过渡态残影）；下载按钮反向处理——点击瞬间就跟随
+// 大图（transform 动画期间由 startPostClickFollow 逐帧钉在图片左上角，
+// 见 content-ui.js），否则按钮会卡在旧位置、动画结束后才「跳」过去。
+// 兜底重检：部分查看器（如知乎）打开时不产生任何 boundary events（不复用/搬移
+// 图片节点），click 清理后的按钮/halo 若无人接管就永远消失。600ms 时（查看器已
+// 就位、不会误命中被盖住的旧图）若仍无 mouseenter 接管，主动在光标位置命中检测。
+const CLICK_RECHECK_DELAY = 600;
+let postClickAwaitingEnter = false; // click 后是否还没有任何 mouseenter 接管
+let postClickRecheckHit = false;    // 本次 triggerHoverDetection 来自兜底重检
+let postClickRecheckTimer = null;
 let postClickMutObserver = null;
 
 // 两个矩形的空间重叠度：交集面积 ÷ 两者中较小者的面积（0~1）。
@@ -659,6 +690,24 @@ document.addEventListener('click', (e) => {
     discardPostClickContext();
     if (onCurrentImage) {
         postClickContext = { root: rootImg, time: performance.now(), domChanged: false };
+        // 兜底重检安排：等 600ms，若期间没有任何 mouseenter 接管（某些查看器打开
+        // 时不派发 boundary events），主动在光标位置命中检测一次恢复反馈
+        postClickAwaitingEnter = true;
+        if (postClickRecheckTimer) clearTimeout(postClickRecheckTimer);
+        postClickRecheckTimer = setTimeout(() => {
+            postClickRecheckTimer = null;
+            if (postClickAwaitingEnter) {
+                // 重检路径命中时动画已结束（600ms > 常见动画时长），
+                // 抑制延迟归零，按钮/halo 立即出现，无需再等 contextDelay
+                postClickAwaitingEnter = false;
+                postClickRecheckHit = true;
+                try {
+                    detectHoverAtCursor();
+                } finally {
+                    postClickRecheckHit = false;
+                }
+            }
+        }, CLICK_RECHECK_DELAY);
         // 条件③：窗口内监测 DOM 是否真的因点击改变（查看器插入/reparent/换 src）
         postClickMutObserver = new MutationObserver(() => {
             if (postClickContext) postClickContext.domChanged = true;
@@ -675,6 +724,11 @@ document.addEventListener('click', (e) => {
                 discardPostClickContext();
             }
         }, POST_CLICK_CONTEXT_MS + 50);
+        // 按钮已显示时立即启动逐帧跟随：查看器动画是 transform 变换，
+        // 常规观察器感知不到每帧位置，rAF 把按钮钉在图片左上角一起飞
+        if (downloadButton && downloadButton.parentNode) {
+            startPostClickFollow();
+        }
     }
 
     // 点击瞬间收掉挂起的反馈：Chrome 只在鼠标移动后才派发 mouseleave，

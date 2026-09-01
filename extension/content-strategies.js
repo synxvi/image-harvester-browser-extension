@@ -188,18 +188,13 @@ function cancelHaloStabilizeWait() {
 const HALO_STABLE_FRAMES = 3;      // 需连续稳定的帧数
 const HALO_STABLE_EPSILON = 0.25;  // 视为「不变」的坐标误差（px）
 const HALO_STABLE_TIMEOUT = 1000;  // 稳定等待上限：超时按最新矩形显示，后续仍由观察器校准
-// 点击重构场景（查看器入场/缩放动画）的最短观察期：ease-out 尾段每帧位移极小，
-// 仅凭帧间差会被误判为已稳定；多观察一段时间确保动画真正结束、尺寸定稿。
-const HALO_STABLE_MIN_OBSERVE_CLICK = 200;
+// 注：不再设「点击场景最短观察期」——抑制场景的 halo 创建时机已被 contextDelay
+// 推迟到查看器动画结束之后，再加观察期只会让 halo 比同批出现的按钮晚 ~200ms。
 
 function scheduleHaloWhenStable() {
     cancelHaloStabilizeWait();
     haloAwaitingStable = true;
     const start = performance.now();
-    // 仅点击重构场景要求最短观察期；普通悬停场景图片早已静止，无需额外等待
-    const minObserve = (postClickContext && postClickContext.domChanged)
-        ? HALO_STABLE_MIN_OBSERVE_CLICK
-        : 0;
     let last = null;
     let stableCount = 0;
     const tick = () => {
@@ -221,8 +216,7 @@ function scheduleHaloWhenStable() {
             stableCount = 0;
             last = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
         }
-        if ((stableCount >= HALO_STABLE_FRAMES && performance.now() - start >= minObserve)
-            || performance.now() - start >= HALO_STABLE_TIMEOUT) {
+        if (stableCount >= HALO_STABLE_FRAMES || performance.now() - start >= HALO_STABLE_TIMEOUT) {
             haloStabilizeRAF = null;
             haloAwaitingStable = false;
             positionHaloOverlay();
