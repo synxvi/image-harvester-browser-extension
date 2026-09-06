@@ -76,8 +76,15 @@ function createDownloadToolbar(img) {
 }
 
 // Position download button/toolbar relative to image (fixed to viewport)
+// 返回是否成功定位：目标矩形退化（宽高 <1px，display:none / 未布局 / scale(0)）
+// 时拒绝更新并返回 false，按钮保持上一帧位置。此类退化矩形多出现在查看器
+// reparent/clone 图片节点的空档帧，若照常应用，按钮会被甩到视口原点闪现。
+// （halo 的 positionHaloOverlay 有同款守卫。）
 function positionButton(img, button) {
     const rect = img.getBoundingClientRect();
+    if (rect.width < 1 || rect.height < 1) {
+        return false;
+    }
 
     // clientWidth 不含滚动条宽度，与 position:fixed 定位参考一致
     // window.innerWidth 包含滚动条，会导致按钮偏左（Windows 上约 17px）
@@ -95,6 +102,7 @@ function positionButton(img, button) {
         button.style.left = 'auto';
     }
     button.style.top = (rect.top + GAP) + 'px';
+    return true;
 }
 
 // 图片 load 事件处理：src 变更后新图加载完成时重定位按钮
@@ -232,8 +240,14 @@ function showDownloadButton(img) {
         downloadButton = createDownloadButton();
     }
 
+    // 先定位再入 DOM：目标矩形退化（尚未布局/刚被隐藏，罕见——事件命中的元素
+    // 通常已有尺寸）时放弃本次显示。若先 append，按钮会以 CSS 默认位置
+    // （视口右上角）闪现一帧；放弃后用户下一次鼠标动作会重新走完整流程。
+    if (!positionButton(img, downloadButton)) {
+        downloadButton = null;
+        return;
+    }
     document.body.appendChild(downloadButton);
-    positionButton(img, downloadButton);
     if (wasShowing) {
         downloadButton.style.animation = 'none';
     }
@@ -275,6 +289,16 @@ function stopPostClickFollow() {
 function startPostClickFollow() {
     stopPostClickFollow();
     const start = performance.now();
+    // 帧间瞬跳守卫：查看器 reparent/clone 图片节点的一两帧空档里，目标矩形会
+    // 瞬跳到过渡位置（常见特征：跳到视口原点 (0,0)，fixed 容器尚未应用 transform，
+    // 或节点被隐藏后退化全 0）。若照常应用，按钮会被甩到网页左上角闪现一帧。
+    // 判据（满足其一即跳过本帧应用，仅记录，动画恢复连续后自动回轨）：
+    //   ① 中心点单帧位移超过视口对角线 1/8（1080p ≈275px，远大于常见查看器
+    //      动画的单帧插值位移，小于跨屏瞬跳距离）；
+    //   ② 矩形吸附到视口原点而上一帧不在原点（空档帧的典型形态；图片本身
+    //      合法位于左上角时连续帧都在原点，不会被拦）。
+    const maxFrameJump = Math.hypot(window.innerWidth, window.innerHeight) / 8;
+    let lastRect = null;
     const tick = () => {
         // 按钮已销毁/目标已切换/上下文窗口结束 → 停止（之后由常规观察器接管）
         if (!currentImage || !downloadButton || !downloadButton.parentNode
@@ -282,10 +306,22 @@ function startPostClickFollow() {
             postClickFollowRAF = null;
             return;
         }
-        positionButton(currentImage, downloadButton);
-        if (haloTarget === currentImage) {
-            positionHaloOverlay();
+        const rect = currentImage.getBoundingClientRect();
+        const atOrigin = rect.left < 1 && rect.top < 1;
+        const jumped = !!lastRect && (
+            Math.hypot(
+                (rect.left + rect.width / 2) - (lastRect.left + lastRect.width / 2),
+                (rect.top + rect.height / 2) - (lastRect.top + lastRect.height / 2)
+            ) > maxFrameJump
+            || (atOrigin && !(lastRect.left < 1 && lastRect.top < 1))
+        );
+        if (!jumped) {
+            positionButton(currentImage, downloadButton);
+            if (haloTarget === currentImage) {
+                positionHaloOverlay();
+            }
         }
+        lastRect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
         postClickFollowRAF = requestAnimationFrame(tick);
     };
     postClickFollowRAF = requestAnimationFrame(tick);

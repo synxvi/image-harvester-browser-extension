@@ -26,8 +26,8 @@ function showPageToast(messageKey, type = 'start', detail = '') {
 
     // 内置翻译表，支持 popup 中用户选择的语言
     const translations = {
-        en: { toastDownloadStart: 'Downloading', toastDownloadComplete: 'Downloaded', toastDownloadFailed: 'Download failed' },
-        zh_CN: { toastDownloadStart: '开始下载', toastDownloadComplete: '下载完成', toastDownloadFailed: '下载失败' }
+        en: { toastDownloadStart: 'Downloading', toastDownloadComplete: 'Downloaded', toastDownloadFailed: 'Download failed', toastExtReloaded: 'Extension reloaded, refresh the page to download' },
+        zh_CN: { toastDownloadStart: '开始下载', toastDownloadComplete: '下载完成', toastDownloadFailed: '下载失败', toastExtReloaded: '扩展已重新加载，请刷新页面后再下载' }
     };
 
     // 根据用户语言偏好获取文本
@@ -108,12 +108,40 @@ function getEnhancedImageUrl(img) {
     return pickBestFromSrcset(img) || pickLazyLoadedUrl(img) || img.currentSrc || img.src || null;
 }
 
+// ====== 扩展上下文失效防护 ======
+// 扩展重载/自动更新后，未刷新页面的旧 content script 与 background 的连接已断
+// （runtime invalidated）：悬浮按钮等 UI 仍残留在页面上，但下载消息发不出去。
+// 此状态下 chrome.runtime.sendMessage 会同步抛错，promise 的 .catch 捕获不到，
+// 若不拦截用户只会看到「开始下载」toast 而后静默丢失。
+function isExtensionContextValid() {
+    return !!(chrome.runtime && chrome.runtime.id);
+}
+
+// sendMessage 的安全包装：失效预检 + 同步异常统一转 rejected promise，
+// 让调用方的 .catch（红 toast、失败补记）能正常接住。
+function sendMessageSafe(message) {
+    try {
+        if (!isExtensionContextValid()) {
+            return Promise.reject(new Error('Extension context invalidated'));
+        }
+        return chrome.runtime.sendMessage(message);
+    } catch (e) {
+        return Promise.reject(e);
+    }
+}
+
 // Download image or video
 async function downloadElement(element, pathIndex = -1) {
     // 快照当前按钮引用：异步回调只操作此快照，避免竞态条件
     // （用户可能在下载期间重新悬停图片，downloadButton 已指向新按钮）
     const activeButton = downloadButton;
     const activeButtonHtml = activeButton ? activeButton.innerHTML : '💾';
+
+    // 上下文已失效时明确提示刷新，而非伪装成一次正常下载
+    if (!isExtensionContextValid()) {
+        showPageToast('toastExtReloaded', 'error');
+        return;
+    }
 
     try {
         let elementUrl;
@@ -245,7 +273,8 @@ async function downloadElement(element, pathIndex = -1) {
             // 下载请求失败反馈：页面红色 toast + 通知 background 补记失败记录
             const reportFailure = (finalFilename, err) => {
                 showPageToast('toastDownloadFailed', 'error', finalFilename || filename);
-                chrome.runtime.sendMessage({
+                // 上下文失效时此消息同样发不出去，sendMessageSafe 保证不在此处二次抛错
+                sendMessageSafe({
                     type: 'record_download_failed',
                     filename: finalFilename || filename,
                     url: (elementUrl && elementUrl.length <= 500) ? elementUrl : '',
@@ -263,14 +292,20 @@ async function downloadElement(element, pathIndex = -1) {
             const downloadBlob = (blob, finalFilename) => {
                 const reader = new FileReader();
                 reader.onloadend = () => {
-                    chrome.runtime.sendMessage({
+                    // canvas/WebP 转换是异步的，到达此处时上下文可能已失效
+                    // （转换期间扩展被重载），sendMessageSafe 统一转成可 catch 的失败
+                    sendMessageSafe({
                         type: 'download_canvas_image',
                         dataUrl: reader.result,
                         filename: finalFilename,
                         pathIndex: pathIndex
                     }).then(markTriggered).catch((err) => {
                         debug.error('Blob 下载消息发送失败:', err);
-                        reportFailure(finalFilename, err);
+                        if (!isExtensionContextValid()) {
+                            showPageToast('toastExtReloaded', 'error');
+                        } else {
+                            reportFailure(finalFilename, err);
+                        }
                     });
                 };
                 reader.readAsDataURL(blob);
@@ -319,7 +354,7 @@ async function downloadElement(element, pathIndex = -1) {
             // FileReader base64 → sendMessage 巨型消息）已移除：大图消息易超扩展
             // 消息上限且失败静默，是"大图连续下载偶发丢失"的根因；大图内容现在
             // 全程留在 SW 内处理，不经过扩展消息通道。
-            chrome.runtime.sendMessage({
+            sendMessageSafe({
                 type: 'download_image',
                 url: elementUrl,
                 filename: filename,
@@ -327,12 +362,21 @@ async function downloadElement(element, pathIndex = -1) {
                 pathIndex: pathIndex
             }).then(markTriggered).catch((err) => {
                 debug.error('Download request failed:', err);
-                reportFailure(filename, err);
+                if (!isExtensionContextValid()) {
+                    showPageToast('toastExtReloaded', 'error');
+                } else {
+                    reportFailure(filename, err);
+                }
             });
         });
 
     } catch (error) {
         debug.error('Error downloading element:', error);
+        // 异步准备阶段（URL 转换/命名模板）期间扩展被重载：入口检查已错过，
+        // 在此兜底提示，避免只留下「开始下载」toast 的静默丢失
+        if (!isExtensionContextValid()) {
+            showPageToast('toastExtReloaded', 'error');
+        }
     }
 }
 

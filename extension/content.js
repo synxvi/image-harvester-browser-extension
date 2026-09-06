@@ -335,15 +335,23 @@ function triggerHoverDetection(rawElement) {
     //   ① 刚在当前图片上发生过左键点击（postClickContext 未过期）；
     //   ② 点击的不是悬浮按钮（click 处理器对按钮直接跳过，不会建立上下文）；
     //   ③ 点击确实引发了 DOM 改变（上下文窗口内 MutationObserver 置位；
-    //      无变化的普通站点不受影响，快速跟随时机与 v1.7.0 行为一致）。
+    //      无变化的普通站点不受影响，快速跟随时机与 v1.7.0 行为一致）；
+    //   ④ 光标仍停留在点击点附近（≤ CLICK_TAKEOVER_RADIUS）。
     // 背景：linux.do/Discourse 的 PhotoSwipe 查看器会复用帖子 <img>（reparent 或
     // clone + 换高清 src），点击后几毫秒内新图被送回光标下触发 mouseenter；若照常
     // 快速跟随，halo 会在动画启动前的静止间隙以原缩略图位置/尺寸点亮 = 闪烁。
+    // 条件④是按钮 0ms 通道的闸门：打开查看器时用户不挪鼠标（光标 ≈ 点击点），
+    // 视为新图对旧悬停的「接管」；而关闭查看器同样会刷新点击上下文（点击遮罩/
+    // 关闭按钮 → domChanged=true），若不加此条件，之后 1.5s 内移到任何新图都会
+    // 无视 hoverDelay 立即弹出按钮。用户主动移开的悬停是真实换图，必须重走完整延迟。
     // 注意：这里刻意不比对目标节点与点击节点是否同一——查看器可能 clone 节点，
     // 节点同一性不可靠；窗口仅 1.5 秒，期间真实换图悬停最多多等一个完整延迟，无感。
+    const cursorNearClick = !!(postClickContext
+        && Math.hypot(lastCursorX - postClickContext.x, lastCursorY - postClickContext.y) <= CLICK_TAKEOVER_RADIUS);
     const suppressFastFollow = !!(postClickContext
         && postClickContext.domChanged
-        && performance.now() - postClickContext.time < POST_CLICK_CONTEXT_MS);
+        && performance.now() - postClickContext.time < POST_CLICK_CONTEXT_MS
+        && cursorNearClick);
     const fastFollow = alreadyActive && !suppressFastFollow;
 
     // 抑制场景（点击重构/查看器动画）：按钮与 halo 用同一延迟**同步**出现。
@@ -424,9 +432,11 @@ function handleMouseLeave(e) {
     // 点击重构场景（查看器打开动画期间）：延长隐藏等待到上下文有效期，
     // 防止按钮/halo 的重现定时器（glowDelay）到点前就被这里清场，导致
     // 之后必须等新的鼠标动作才会重新出现。窗口内新的 mouseenter 会以
-    // isMouseOverImage 守卫正常接管。
+    // isMouseOverImage 守卫正常接管。与 suppressFastFollow 一致要求光标
+    // 仍在点击点附近：关闭查看器后用户把鼠标移开是真实离开，走正常隐藏延迟。
     const inClickContext = !!(postClickContext && postClickContext.domChanged
-        && performance.now() - postClickContext.time < POST_CLICK_CONTEXT_MS);
+        && performance.now() - postClickContext.time < POST_CLICK_CONTEXT_MS
+        && Math.hypot(lastCursorX - postClickContext.x, lastCursorY - postClickContext.y) <= CLICK_TAKEOVER_RADIUS);
     const hideDelay = inClickContext ? POST_CLICK_CONTEXT_MS : baseHideDelay;
 
     // Hide button after delay based on settings
@@ -606,6 +616,10 @@ document.addEventListener('mousemove', (e) => {
 // 图片节点），click 清理后的按钮/halo 若无人接管就永远消失。600ms 时（查看器已
 // 就位、不会误命中被盖住的旧图）若仍无 mouseenter 接管，主动在光标位置命中检测。
 const CLICK_RECHECK_DELAY = 600;
+// 「光标仍在点击点附近」判定半径（px）：打开查看器的接管发生在光标不动或仅微动
+// 时（点击后几毫秒新图被送回光标下，位移通常 <50px）；关闭查看器后用户把鼠标
+// 移向其他图片是真实换图。80px 容纳手部微调，又远小于正常的跨图移动距离。
+const CLICK_TAKEOVER_RADIUS = 80;
 let postClickAwaitingEnter = false; // click 后是否还没有任何 mouseenter 接管
 let postClickRecheckHit = false;    // 本次 triggerHoverDetection 来自兜底重检
 let postClickRecheckTimer = null;
@@ -630,6 +644,48 @@ function discardPostClickContext() {
         postClickMutObserver = null;
     }
     postClickContext = null;
+}
+
+// 元素是否处于「全屏覆盖层」中：祖先链上存在 fixed/absolute 定位且覆盖视口 ≥80%
+// 的容器——lightbox/查看器（PhotoSwipe、知乎查看器等）的标志性结构。
+function isInFullscreenOverlay(el) {
+    let node = el;
+    while (node && node !== document.body) {
+        if (node instanceof Element) {
+            const cs = window.getComputedStyle(node);
+            if (cs.position === 'fixed' || cs.position === 'absolute') {
+                const r = node.getBoundingClientRect();
+                if (r.width >= document.documentElement.clientWidth * 0.8
+                    && r.height >= window.innerHeight * 0.8) {
+                    return true;
+                }
+            }
+        }
+        node = node.parentElement;
+    }
+    return false;
+}
+
+// 兜底重检的恢复条件：光标下命中的必须是「查看器接管后的图片」，而非查看器
+// 关闭后恢复原状的普通页面。两种接管形态：
+//   ① 命中目标就是点击的图片本身 → 其矩形相比点击瞬间快照明显变化
+//      （面积 >1.5 倍或 <2/3，被查看器原地放大/搬移；长图在查看器中受视口
+//       限制缩小也计入）；面积近似 = 查看器未改变它或已关闭恢复原状 → 不恢复。
+//   ② 命中目标换成了其他节点 → 查看器 clone/新建的大图，要求其处于全屏
+//      覆盖层中（打开状态下）；关闭后光标下的相邻图片/正文元素不在覆盖层 → 不恢复。
+// 背景：兜底重检原本假设「click 后必然是打开查看器」，但点击关闭查看器同样
+// 会建立点击上下文；若照旧恢复，按钮会无视 hoverDelay 立即出现在光标下元素上。
+function isViewerTakeover(el) {
+    const ctx = postClickContext;
+    if (!ctx || !el) return false;
+    if (ctx.root && (el === ctx.root || ctx.root.contains(el) || el.contains(ctx.root))) {
+        if (!ctx.rootRect) return true; // 无快照时保守恢复（正常路径必有快照）
+        const r = ctx.root.getBoundingClientRect();
+        const areaRatio = (r.width * r.height)
+            / Math.max(1, ctx.rootRect.width * ctx.rootRect.height);
+        return areaRatio > 1.5 || areaRatio < 2 / 3;
+    }
+    return isInFullscreenOverlay(el);
 }
 
 document.addEventListener('click', (e) => {
@@ -689,7 +745,19 @@ document.addEventListener('click', (e) => {
     ));
     discardPostClickContext();
     if (onCurrentImage) {
-        postClickContext = { root: rootImg, time: performance.now(), domChanged: false };
+        // x/y：点击坐标（视口系），供「光标是否仍停留在点击处」判定——区分
+        //      打开查看器（光标不动，DOM 重构把新图送回光标下）与关闭查看器后
+        //      用户主动移向其他图片（光标已离开点击点）。
+        // rootRect：点击瞬间目标图片的矩形快照，供兜底重检判断该图片此后是否
+        //      被查看器原地放大/搬移（面积明显变化 = 查看器接管了它）。
+        postClickContext = {
+            root: rootImg,
+            time: performance.now(),
+            domChanged: false,
+            x: e.clientX,
+            y: e.clientY,
+            rootRect: (r => ({ left: r.left, top: r.top, width: r.width, height: r.height }))(rootImg.getBoundingClientRect())
+        };
         // 兜底重检安排：等 600ms，若期间没有任何 mouseenter 接管（某些查看器打开
         // 时不派发 boundary events），主动在光标位置命中检测一次恢复反馈
         postClickAwaitingEnter = true;
@@ -697,14 +765,20 @@ document.addEventListener('click', (e) => {
         postClickRecheckTimer = setTimeout(() => {
             postClickRecheckTimer = null;
             if (postClickAwaitingEnter) {
-                // 重检路径命中时动画已结束（600ms > 常见动画时长），
-                // 抑制延迟归零，按钮/halo 立即出现，无需再等 contextDelay
                 postClickAwaitingEnter = false;
-                postClickRecheckHit = true;
-                try {
-                    detectHoverAtCursor();
-                } finally {
-                    postClickRecheckHit = false;
+                // 重检路径命中时动画已结束（600ms > 常见动画时长），
+                // 抑制延迟归零，按钮/halo 立即出现，无需再等 contextDelay。
+                // 仅当命中的是查看器接管后的图片才恢复：点击/ESC 关闭查看器同样
+                // 建立了点击上下文，此时光标下是恢复原状的小图或普通页面元素，
+                // 照旧恢复会让按钮无视 hoverDelay 立即弹出。
+                const el = document.elementFromPoint(lastCursorX, lastCursorY);
+                if (el && isViewerTakeover(el)) {
+                    postClickRecheckHit = true;
+                    try {
+                        detectHoverAtCursor();
+                    } finally {
+                        postClickRecheckHit = false;
+                    }
                 }
             }
         }, CLICK_RECHECK_DELAY);
